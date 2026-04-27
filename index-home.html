@@ -64,14 +64,14 @@
 
   <div class="group-title">ENVIRONNEMENT</div>
   <div class="control">
-    <label>Début du Fade <span class="value" id="fogStartVal">4.0</span></label>
-    <input type="range" id="fogStart" min="0" max="20" step="0.1" value="4.0">
+    <label>Début du Fade <span class="value" id="fogStartVal">0</span></label>
+    <input type="range" id="fogStart" min="0" max="20" step="0.1" value="0">
   </div>
 
   <div class="group-title">TOPOGRAPHIE</div>
   <div class="control">
-    <label>Rapprochement <span class="value" id="topoSpacingVal">150</span></label>
-    <input type="range" id="topoSpacing" min="10" max="300" step="1" value="150">
+    <label>Rapprochement <span class="value" id="topoSpacingVal">108</span></label>
+    <input type="range" id="topoSpacing" min="10" max="300" step="1" value="108">
   </div>
   <div class="control">
     <label>Finesse <span class="value" id="topoWidthVal">0.10</span></label>
@@ -84,12 +84,12 @@
 
   <div class="group-title">POINTS</div>
   <div class="control">
-    <label>Densité <span class="value" id="densityVal">340</span></label>
-    <input type="range" id="density" min="50" max="600" step="1" value="340">
+    <label>Densité <span class="value" id="densityVal">302</span></label>
+    <input type="range" id="density" min="50" max="600" step="1" value="302">
   </div>
   <div class="control">
-    <label>Taille <span class="value" id="pointSizeVal">0.020</span></label>
-    <input type="range" id="pointSize" min="0.005" max="0.1" step="0.001" value="0.020">
+    <label>Taille <span class="value" id="pointSizeVal">0.015</span></label>
+    <input type="range" id="pointSize" min="0.005" max="0.1" step="0.001" value="0.015">
   </div>
   <div class="color-control">
     <label>Couleur base</label>
@@ -98,12 +98,12 @@
 
   <div class="group-title">ONDE</div>
   <div class="control">
-    <label>Vitesse <span class="value" id="waveSpeedVal">1.1</span></label>
-    <input type="range" id="waveSpeed" min="0.1" max="5.0" step="0.1" value="1.1">
+    <label>Vitesse <span class="value" id="waveSpeedVal">0.4</span></label>
+    <input type="range" id="waveSpeed" min="0.1" max="5.0" step="0.1" value="0.4">
   </div>
   <div class="control">
-    <label>Fréquence <span class="value" id="waveSizeVal">2.4</span></label>
-    <input type="range" id="waveSize" min="0.5" max="10.0" step="0.1" value="2.4">
+    <label>Fréquence <span class="value" id="waveSizeVal">0.5</span></label>
+    <input type="range" id="waveSize" min="0.5" max="10.0" step="0.1" value="0.5">
   </div>
   <div class="color-control">
     <label>Couleur onde</label>
@@ -112,12 +112,12 @@
 
   <div class="group-title">MAISONS</div>
   <div class="control">
-    <label>Opacité <span class="value" id="houseAlphaVal">0.7</span></label>
-    <input type="range" id="houseAlpha" min="0" max="1" step="0.05" value="0.7">
+    <label>Opacité <span class="value" id="houseAlphaVal">0.65</span></label>
+    <input type="range" id="houseAlpha" min="0" max="1" step="0.05" value="0.65">
   </div>
   <div class="color-control">
     <label>Couleur</label>
-    <div class="color-wrapper"><input type="color" id="houseColor" value="#6289FF"></div>
+    <div class="color-wrapper"><input type="color" id="houseColor" value="#0033FF"></div>
   </div>
 
   <button class="btn-save" id="saveBtn">SAUVEGARDER CONFIG</button>
@@ -148,9 +148,8 @@ const scene = new THREE.Scene();
 const bgColor = new THREE.Color(0xF2F3FF);
 scene.background = bgColor;
 
-// Changement pour Fog LINÉAIRE : (couleur, debut, fin)
-// Plus le début est loin, plus le premier plan est net.
-scene.fog = new THREE.Fog(bgColor, 4.0, 15.0);
+// Initialisé avec Début du Fade = 0
+scene.fog = new THREE.Fog(bgColor, 0.0, 11.0);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(1.179, 1.808, 2.840);
@@ -170,8 +169,9 @@ sun.position.set(5, 10, 5);
 scene.add(sun);
 
 /* ====================== SHADERS ====================== */
-const topoUniforms = { uColor: { value: new THREE.Color(0x6289FF) }, uSpacing: { value: 150.0 }, uLineWidth: { value: 0.1 } };
-const waveUniforms = { uTime: { value: 0 }, uBaseColor: { value: new THREE.Color(0x0033FF) }, uWaveColor: { value: new THREE.Color(0x1AFED0) }, uWaveSpeed: { value: 1.1 }, uWaveSize: { value: 2.4 }, uPointSize: { value: 0.020 } };
+// Initialisé avec les valeurs de l'image
+const topoUniforms = { uColor: { value: new THREE.Color(0x6289FF) }, uSpacing: { value: 108.0 }, uLineWidth: { value: 0.1 } };
+const waveUniforms = { uTime: { value: 0 }, uBaseColor: { value: new THREE.Color(0x0033FF) }, uWaveColor: { value: new THREE.Color(0x1AFED0) }, uWaveSpeed: { value: 0.4 }, uWaveSize: { value: 0.5 }, uPointSize: { value: 0.015 } };
 
 const topoMaterial = new THREE.ShaderMaterial({
   uniforms: { ...topoUniforms, ...THREE.UniformsLib['fog'] },
@@ -224,6 +224,7 @@ async function load() {
 
   housesGroup.add(mData.scene);
   
+  // Priorité au LocalStorage si existant, sinon garde les défauts définis ci-dessus
   loadSavedConfig();
   updateHouses();
   regenerateGrid();
@@ -344,8 +345,8 @@ function loadSavedConfig() {
 document.getElementById('fogStart').addEventListener('input', e => {
   const v = parseFloat(e.target.value);
   scene.fog.near = v;
-  scene.fog.far = v + 11.0; // Garde une transition de 11 unités
-  document.getElementById('fogStartVal').textContent = v.toFixed(1);
+  scene.fog.far = v + 11.0;
+  document.getElementById('fogStartVal').textContent = v;
 });
 document.getElementById('topoSpacing').addEventListener('input', e => { topoUniforms.uSpacing.value = parseFloat(e.target.value); document.getElementById('topoSpacingVal').textContent = e.target.value; });
 document.getElementById('topoWidth').addEventListener('input', e => { topoUniforms.uLineWidth.value = parseFloat(e.target.value); document.getElementById('topoWidthVal').textContent = e.target.value; });
