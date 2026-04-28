@@ -100,6 +100,24 @@
 <div class="panel" id="uiPanel">
   <div style="font-weight: 600; color: var(--accent); letter-spacing: 0.2em; margin-bottom: 20px; font-size: 12px;">PARAMÈTRES</div>
 
+  <div class="group-title">ÉCLAIRAGE</div>
+  <div class="control">
+    <label>Lumière ambiante <span class="value" id="ambientVal">1.35</span></label>
+    <input type="range" id="ambient" min="0" max="3" step="0.05" value="1.35">
+  </div>
+  <div class="control">
+    <label>Soleil <span class="value" id="sunVal">1.85</span></label>
+    <input type="range" id="sun" min="0" max="5" step="0.05" value="1.85">
+  </div>
+  <div class="control">
+    <label>Azimut <span class="value" id="sunAzVal">233</span>°</label>
+    <input type="range" id="sunAz" min="0" max="360" step="1" value="233">
+  </div>
+  <div class="control">
+    <label>Élévation <span class="value" id="sunElVal">90</span>°</label>
+    <input type="range" id="sunEl" min="0" max="90" step="1" value="90">
+  </div>
+
   <div class="group-title">FOND DE CARTE</div>
   <div class="control">
     <label>Début du Fog <span class="value" id="fogStartVal">20</span></label>
@@ -117,20 +135,20 @@
   <div class="group-title">BOKEH / FOCUS</div>
   <div class="toggle-control">
     <span class="toggle-label">Activer le bokeh</span>
-    <div class="toggle-btn" id="bokehToggle"></div>
+    <div class="toggle-btn on" id="bokehToggle"></div>
   </div>
-  <div id="bokehControls" style="display:none">
+  <div id="bokehControls" style="display:block">
     <div class="control">
-      <label>Intensité flou <span class="value" id="bokehBlurVal">10</span>px</label>
-      <input type="range" id="bokehBlur" min="1" max="30" step="1" value="10">
+      <label>Intensité flou <span class="value" id="bokehBlurVal">30</span>px</label>
+      <input type="range" id="bokehBlur" min="1" max="30" step="1" value="30">
     </div>
     <div class="control">
-      <label>Rayon net <span class="value" id="bokehRadiusVal">28</span>%</label>
-      <input type="range" id="bokehRadius" min="5" max="70" step="1" value="28">
+      <label>Rayon net <span class="value" id="bokehRadiusVal">59</span>%</label>
+      <input type="range" id="bokehRadius" min="5" max="70" step="1" value="59">
     </div>
     <div class="control">
-      <label>Douceur transition <span class="value" id="bokehSoftnessVal">40</span>%</label>
-      <input type="range" id="bokehSoftness" min="0" max="80" step="1" value="40">
+      <label>Douceur transition <span class="value" id="bokehSoftnessVal">25</span>%</label>
+      <input type="range" id="bokehSoftness" min="0" max="80" step="1" value="25">
     </div>
     <div class="btn-row">
       <div class="btn" id="setFocusBtn">PLACER LE FOCUS</div>
@@ -140,8 +158,8 @@
 
   <div class="group-title">TOPOGRAPHIE</div>
   <div class="control">
-    <label>Rapprochement <span class="value" id="topoSpacingVal">150</span></label>
-    <input type="range" id="topoSpacing" min="10" max="300" step="1" value="150">
+    <label>Rapprochement <span class="value" id="topoSpacingVal">94</span></label>
+    <input type="range" id="topoSpacing" min="10" max="300" step="1" value="94">
   </div>
   <div class="control">
     <label>Finesse <span class="value" id="topoWidthVal">0.10</span></label>
@@ -149,7 +167,7 @@
   </div>
   <div class="color-control">
     <label>Couleur traits</label>
-    <div class="color-wrapper"><input type="color" id="topoColor" value="#6289FF"></div>
+    <div class="color-wrapper"><input type="color" id="topoColor" value="#6289ff"></div>
   </div>
 
   <div class="group-title">ALTITUDES</div>
@@ -172,8 +190,8 @@
 
   <div class="group-title">POINTS</div>
   <div class="control">
-    <label>Densité <span class="value" id="densityVal">172</span></label>
-    <input type="range" id="density" min="50" max="600" step="1" value="172">
+    <label>Densité <span class="value" id="densityVal">202</span></label>
+    <input type="range" id="density" min="50" max="600" step="1" value="202">
   </div>
   <div class="control">
     <label>Taille <span class="value" id="pointSizeVal">0.025</span></label>
@@ -195,7 +213,7 @@
   </div>
   <div class="color-control">
     <label>Couleur onde</label>
-    <div class="color-wrapper"><input type="color" id="waveColor" value="#1AFED0"></div>
+    <div class="color-wrapper"><input type="color" id="waveColor" value="#85ffe7"></div>
   </div>
 
   <div class="group-title">HOTSPOT</div>
@@ -206,12 +224,12 @@
 
   <div class="group-title">MAISONS</div>
   <div class="control">
-    <label>Opacité <span class="value" id="houseAlphaVal">0.9</span></label>
-    <input type="range" id="houseAlpha" min="0" max="1" step="0.05" value="0.9">
+    <label>Opacité <span class="value" id="houseAlphaVal">1.0</span></label>
+    <input type="range" id="houseAlpha" min="0" max="1" step="0.05" value="1">
   </div>
   <div class="color-control">
     <label>Couleur</label>
-    <div class="color-wrapper"><input type="color" id="houseColor" value="#0033FF"></div>
+    <div class="color-wrapper"><input type="color" id="houseColor" value="#85a3ff"></div>
   </div>
 
   <button class="btn-save" id="saveBtn">SAUVEGARDER CONFIG</button>
@@ -256,23 +274,26 @@ controls.target.set(-0.361, 0.285, 0.235);
 controls.enableRotate = false; controls.enableZoom = false; controls.enablePan = false;
 controls.enableDamping = true;
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+const ambientLight = new THREE.AmbientLight(0xffffff, 1.35);
+scene.add(ambientLight);
+const sun = new THREE.DirectionalLight(0xffffff, 1.85);
 sun.position.set(5, 10, 5);
 scene.add(sun);
+// Position initiale calculée depuis les valeurs par défaut (az=45°, el=63°)
+// sera recalculée par updateSunPosition() après init UI
 
 /* ====================== SHADERS ====================== */
 const topoUniforms = {
   uColor: { value: new THREE.Color(0x6289FF) },
-  uSpacing: { value: 150.0 },
+  uSpacing: { value: 94.0 },
   uLineWidth: { value: 0.1 },
   uReveal: { value: 0.0 },          // 0 = flat, 1 = full terrain
   uTopoRevealDist: { value: 0.0 }   // topo lines draw from cam to back
 };
 const waveUniforms = {
   uTime: { value: 0 },
-  uBaseColor: { value: new THREE.Color(0x0033FF) },
-  uWaveColor: { value: new THREE.Color(0x1AFED0) },
+  uBaseColor: { value: new THREE.Color(0x0033ff) },
+  uWaveColor: { value: new THREE.Color(0x85ffe7) },
   uWaveSpeed: { value: 0.5 },
   uWaveSize: { value: 0.8 },
   uPointSize: { value: 0.005 },
@@ -434,7 +455,7 @@ function startIntro() {
 }
 
 /* ====================== HOTSPOT ====================== */
-let hotspotLocalPos = null;   // vec3 in parallaxGroup space
+let hotspotLocalPos = new THREE.Vector3(0.4726725366978833, 0.4503095624359107, 1.0048503007874532);   // vec3 in parallaxGroup space
 let hotspotWorldPos = new THREE.Vector3();
 let hotspotScreenPos = { x: 0, y: 0, behind: true };
 let hotspotHovered = false;
@@ -741,8 +762,8 @@ function updateFade() {
 /* ====================== BOKEH (CSS backdrop-filter) ====================== */
 const bokehOverlay = document.getElementById('bokehOverlay');
 const focusCursor = document.getElementById('focusCursor');
-let bokehEnabled = false;
-let focusX = 50, focusY = 50; // % position
+let bokehEnabled = true;
+let focusX = 46.328125, focusY = 63.92552366175329; // % position
 let settingFocus = false;
 
 function updateBokeh() {
@@ -857,6 +878,10 @@ function applyConfig(config) {
       parseFloat(config['hotspotLZ'])
     );
   }
+
+  if (config['ambient']) ambientLight.intensity = parseFloat(config['ambient']);
+  if (config['sun']) sun.intensity = parseFloat(config['sun']);
+  if (config['sunAz'] || config['sunEl']) updateSunPosition();
 
   // Sync Three.js uniforms
   scene.fog.near = parseFloat(config['fogStart'] || 20);
@@ -1032,6 +1057,7 @@ async function load() {
   updateHouses();
   updateFade();
   updateBokeh();
+  updateSunPosition();
   regenerateGrid();
   startIntro();
   // Loading overlay is now managed by intro animation — don't hide it here
@@ -1040,6 +1066,34 @@ async function load() {
 /* ====================== UI LISTENERS ====================== */
 const ui = document.getElementById('uiPanel');
 window.addEventListener('keydown', e => { if (e.key === 'Escape') ui.style.display = ui.style.display === 'block' ? 'none' : 'block'; });
+
+function updateSunPosition() {
+  const az = parseFloat(document.getElementById('sunAz').value) * Math.PI / 180;
+  const el = parseFloat(document.getElementById('sunEl').value) * Math.PI / 180;
+  sun.position.set(
+    Math.cos(el) * Math.sin(az) * 10,
+    Math.sin(el) * 10,
+    Math.cos(el) * Math.cos(az) * 10
+  );
+}
+
+document.getElementById('ambient').addEventListener('input', e => {
+  ambientLight.intensity = parseFloat(e.target.value);
+  document.getElementById('ambientVal').textContent = e.target.value;
+});
+document.getElementById('sun').addEventListener('input', e => {
+  sun.intensity = parseFloat(e.target.value);
+  document.getElementById('sunVal').textContent = e.target.value;
+});
+
+document.getElementById('sunAz').addEventListener('input', e => {
+  document.getElementById('sunAzVal').textContent = e.target.value;
+  updateSunPosition();
+});
+document.getElementById('sunEl').addEventListener('input', e => {
+  document.getElementById('sunElVal').textContent = e.target.value;
+  updateSunPosition();
+});
 
 document.getElementById('fadeHeight').addEventListener('input', e => { document.getElementById('fadeHeightVal').textContent = e.target.value; updateFade(); });
 document.getElementById('fadeOpacity').addEventListener('input', e => { document.getElementById('fadeOpacityVal').textContent = parseFloat(e.target.value).toFixed(2); updateFade(); });
