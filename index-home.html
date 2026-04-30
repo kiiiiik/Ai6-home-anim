@@ -216,6 +216,36 @@
     <div class="color-wrapper"><input type="color" id="waveColor" value="#85ffe7"></div>
   </div>
 
+  <div class="group-title">CAMÉRA</div>
+  <div class="control">
+    <label>Pos X <span class="value" id="camPxVal">1.179</span></label>
+    <input type="range" id="camPx" min="-10" max="10" step="0.001" value="1.179">
+  </div>
+  <div class="control">
+    <label>Pos Y <span class="value" id="camPyVal">1.808</span></label>
+    <input type="range" id="camPy" min="-5" max="15" step="0.001" value="1.808">
+  </div>
+  <div class="control">
+    <label>Pos Z <span class="value" id="camPzVal">2.840</span></label>
+    <input type="range" id="camPz" min="-10" max="10" step="0.001" value="2.840">
+  </div>
+  <div class="control">
+    <label>Cible X <span class="value" id="camTxVal">-0.361</span></label>
+    <input type="range" id="camTx" min="-5" max="5" step="0.001" value="-0.361">
+  </div>
+  <div class="control">
+    <label>Cible Y <span class="value" id="camTyVal">0.285</span></label>
+    <input type="range" id="camTy" min="-5" max="5" step="0.001" value="0.285">
+  </div>
+  <div class="control">
+    <label>Cible Z <span class="value" id="camTzVal">0.235</span></label>
+    <input type="range" id="camTz" min="-5" max="5" step="0.001" value="0.235">
+  </div>
+  <div class="btn-row" style="margin-bottom:8px">
+    <div class="btn" id="copyCamBtn">COPIER POSITION</div>
+  </div>
+  <p class="save-note" id="camCopyNote" style="display:none;color:var(--accent)">Position copiée ✓</p>
+
   <div class="group-title">HOTSPOT</div>
   <div class="btn-row" style="margin-bottom:8px">
     <div class="btn" id="setHotspotBtn">PLACER LE HOTSPOT</div>
@@ -263,14 +293,14 @@ scene.background = bgColor;
 scene.fog = new THREE.Fog(bgColor, 20.0, 31.0);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(1.179, 1.808, 2.840);
+camera.position.set(1.6610, 1.7990, 3.0290);
 
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(-0.361, 0.285, 0.235);
+controls.target.set(-0.2920, 0.2850, 0.2350);
 controls.enableRotate = false; controls.enableZoom = false; controls.enablePan = false;
 controls.enableDamping = true;
 
@@ -373,12 +403,17 @@ let introStart = 0;
 let annotReveal = 0;    // 0→1 controls annotation opacity
 let hotspotReveal = 0;  // 0→1 controls hotspot opacity
 
-// Timing (seconds)
+// Camera intro: descend from sky
+const CAM_FINAL = new THREE.Vector3(1.6610, 1.7990, 3.0290);
+const CAM_START_Y = 4.6;    // hauteur de départ (réduite — caméra part de moins haut)
+const INTRO_DURATION = 5.2; // secondes (alignée sur la fin de la séquence d'apparition)
+
+// Timing des étapes d'apparition (secondes) — repris du back
 const I_OVERLAY_OUT   = [0.0,  0.8];  // loading overlay fades out
 const I_TERRAIN       = [0.5,  2.5];  // terrain + points montent
 const I_TOPO_DRAW     = [1.8,  3.8];  // traits se dessinent cam → fond
-const I_BUILDINGS     = [2.8,  4.0];  // buildings fade in
-const I_ANNOT         = [3.5,  4.8];  // altitude labels
+const I_BUILDINGS     = [2.4,  4.2];  // maisons fade in (légèrement décalé après les traits topo)
+const I_ANNOT         = [3.5,  4.8];  // labels d'altitude
 const I_HOTSPOT       = [4.0,  5.2];  // hotspot
 
 function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
@@ -397,40 +432,46 @@ function updateIntro(elapsed) {
   loadingEl.style.opacity = 1 - overlayT;
   if (overlayT >= 1) loadingEl.style.display = 'none';
 
-  // Terrain + points rise together
+  // --- Caméra : descend depuis le ciel sur toute l'intro (mouvement conservé) ---
+  const camT = easeOut(phase(elapsed, 0.0, INTRO_DURATION));
+  camera.position.x = CAM_FINAL.x;
+  camera.position.y = CAM_START_Y + (CAM_FINAL.y - CAM_START_Y) * camT;
+  camera.position.z = CAM_FINAL.z;
+
+  // --- Terrain + points montent ensemble (Y scaling) ---
   const terrainT = easeOut(phase(elapsed, ...I_TERRAIN));
   topoUniforms.uReveal.value = terrainT;
   waveUniforms.uTerrainReveal.value = terrainT;
 
-  // Points wave-reveal (starts slightly after terrain)
+  // --- Onde radiale sur les points (démarre légèrement après le terrain, depuis le hotspot) ---
   const pointsT = easeInOut(phase(elapsed, I_TERRAIN[0] + 0.3, I_TERRAIN[1] + 0.4));
   waveUniforms.uRevealRadius.value = pointsT * 3.5 - 0.2;
 
-  // Topo lines draw from camera to back (view dist 0 → 15)
+  // --- Lignes topo se dessinent de la caméra vers le fond ---
   const topoT = easeInOut(phase(elapsed, ...I_TOPO_DRAW));
   topoUniforms.uTopoRevealDist.value = topoT * 15.0;
 
-  // Buildings fade in
+  // --- Maisons fade in ---
   const buildT = easeOut(phase(elapsed, ...I_BUILDINGS));
   const houseAlpha = parseFloat(document.getElementById('houseAlpha').value);
   housesGroup.traverse(c => {
     if (c.isMesh && c.material) c.material.opacity = buildT * houseAlpha;
   });
 
-  // Annotations + hotspot
-  annotReveal  = easeInOut(phase(elapsed, ...I_ANNOT));
+  // --- Annotations + hotspot ---
+  annotReveal   = easeInOut(phase(elapsed, ...I_ANNOT));
   hotspotReveal = easeInOut(phase(elapsed, ...I_HOTSPOT));
 
-  // Done — snap everything to final state
-  if (elapsed > I_HOTSPOT[1]) {
+  // Done — snap to final state
+  if (elapsed > INTRO_DURATION) {
     introPlaying = false;
+    camera.position.copy(CAM_FINAL);
     topoUniforms.uReveal.value = 1;
     topoUniforms.uTopoRevealDist.value = 15.0;
     waveUniforms.uTerrainReveal.value = 1;
     waveUniforms.uRevealRadius.value = 3.5;
     annotReveal = 1;
     hotspotReveal = 1;
-    housesGroup.scale.y = 1;
     const houseAlphaFinal = parseFloat(document.getElementById('houseAlpha').value);
     housesGroup.traverse(c => { if (c.isMesh && c.material) c.material.opacity = houseAlphaFinal; });
   }
@@ -439,16 +480,17 @@ function updateIntro(elapsed) {
 function startIntro() {
   introPlaying = true;
   introStart = performance.now();
-  // Reset all reveal values
+  // État initial : terrain à plat, lignes topo non dessinées, points invisibles
   topoUniforms.uReveal.value = 0;
   topoUniforms.uTopoRevealDist.value = 0;
   waveUniforms.uTerrainReveal.value = 0;
   waveUniforms.uRevealRadius.value = -1.0;
   annotReveal = 0;
   hotspotReveal = 0;
-  housesGroup.scale.y = 1;
+  // Positionner la caméra en hauteur (mouvement caméra conservé)
+  camera.position.set(CAM_FINAL.x, CAM_START_Y, CAM_FINAL.z);
   housesGroup.traverse(c => { if (c.isMesh && c.material) c.material.opacity = 0; });
-  // Keep loading overlay visible
+  // Loading overlay
   const loadingEl = document.getElementById('loading');
   loadingEl.style.display = 'flex';
   loadingEl.style.opacity = '1';
@@ -541,12 +583,25 @@ function drawHotspot(time) {
   annotCtx.fillStyle = hotspotHovered ? '#fff' : '#12EBC7';
   annotCtx.fill();
 
-  // Label
-  annotCtx.font = '9px IBM Plex Mono, monospace';
-  annotCtx.fillStyle = 'rgba(18,235,199,0.85)';
+  // Label "EXPLORER" : bouton à fond blanc, texte #181C34
+  const labelText = 'EXPLORER';
+  const labelFontPx = 13;
+  annotCtx.font = `600 ${labelFontPx}px "IBM Plex Mono", monospace`;
   annotCtx.textAlign = 'center';
-  annotCtx.textBaseline = 'bottom';
-  annotCtx.fillText('EXPLORER', cx, cy - ringR - 6);
+  annotCtx.textBaseline = 'middle';
+  const padX = 14;
+  const padY = 8;
+  const textW = annotCtx.measureText(labelText).width;
+  const btnW = textW + padX * 2;
+  const btnH = labelFontPx + padY * 2;
+  const btnCx = cx;
+  const btnCy = cy - ringR - 8 - btnH / 2;
+  // Fond blanc
+  annotCtx.fillStyle = '#FFFFFF';
+  annotCtx.fillRect(btnCx - btnW / 2, btnCy - btnH / 2, btnW, btnH);
+  // Texte
+  annotCtx.fillStyle = '#181C34';
+  annotCtx.fillText(labelText, btnCx, btnCy + 1);
 
   annotCtx.restore();
 }
@@ -580,9 +635,9 @@ function updateTransition() {
   controls.target.lerpVectors(camStartTgt, camEndTgt, e);
   parallaxGroup.rotation.y = rotStartY + e * 0.35; // léger virage
 
-  // Fade to bg color after 55%
-  if (transitionT > 0.55) {
-    const ft = (transitionT - 0.55) / 0.45;
+  // Fade to bg color : démarre pendant le zoom pour faire disparaître l'ensemble pendant le mouvement
+  if (transitionT > 0.25) {
+    const ft = Math.min((transitionT - 0.25) / 0.5, 1);
     transOverlay.style.opacity = ft;
     transOverlay.style.pointerEvents = 'auto';
   }
@@ -994,7 +1049,7 @@ function regenerateGrid() {
         vAlpha = smoothstep(0.0, 0.35, uRevealRadius - d);
         vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
         // Taille proportionnelle à la hauteur réelle de l'écran
-        gl_PointSize = uPointSize * (uScreenHeight / -mvPosition.z) * (1.0 + vWave * 1.8);
+        gl_PointSize = uPointSize * (uScreenHeight / -mvPosition.z);
         gl_Position = projectionMatrix * mvPosition;
         #include <fog_vertex>
       }
@@ -1048,9 +1103,16 @@ async function load() {
   parallaxGroup.add(tData.scene);
   housesGroup.add(mData.scene);
   initHotspotFallback(housesGroup);
-  // Set wave reveal origin to hotspot XZ position
+  // Set wave reveal origin AND wave origins to hotspot XZ position
   if (hotspotLocalPos) {
-    waveUniforms.uRevealOrigin.value.set(hotspotLocalPos.x, hotspotLocalPos.z);
+    const hx = hotspotLocalPos.x, hz = hotspotLocalPos.z;
+    waveUniforms.uRevealOrigin.value.set(hx, hz);
+    waveUniforms.uWaveOrigin0.value.set(hx, hz);
+    waveUniforms.uWaveOrigin1.value.set(hx, hz);
+    waveUniforms.uWaveOrigin2.value.set(hx, hz);
+    waveUniforms.uWaveWeight0.value = 1.0;
+    waveUniforms.uWaveWeight1.value = 0.0;
+    waveUniforms.uWaveWeight2.value = 0.0;
   }
 
   loadSavedConfig();
@@ -1157,6 +1219,53 @@ document.getElementById('canvas').addEventListener('click', e => {
   if (hotspotHovered && !transitioning) {
     startSceneTransition();
   }
+});
+
+// Camera controls
+function syncCamSliders() {
+  document.getElementById('camPx').value = camera.position.x;
+  document.getElementById('camPy').value = camera.position.y;
+  document.getElementById('camPz').value = camera.position.z;
+  document.getElementById('camPxVal').textContent = camera.position.x.toFixed(3);
+  document.getElementById('camPyVal').textContent = camera.position.y.toFixed(3);
+  document.getElementById('camPzVal').textContent = camera.position.z.toFixed(3);
+  document.getElementById('camTx').value = controls.target.x;
+  document.getElementById('camTy').value = controls.target.y;
+  document.getElementById('camTz').value = controls.target.z;
+  document.getElementById('camTxVal').textContent = controls.target.x.toFixed(3);
+  document.getElementById('camTyVal').textContent = controls.target.y.toFixed(3);
+  document.getElementById('camTzVal').textContent = controls.target.z.toFixed(3);
+}
+
+['camPx','camPy','camPz'].forEach(id => {
+  document.getElementById(id).addEventListener('input', e => {
+    const axis = id.slice(-1); // x, y, z
+    camera.position[axis] = parseFloat(e.target.value);
+    document.getElementById(id + 'Val').textContent = parseFloat(e.target.value).toFixed(3);
+    controls.update();
+  });
+});
+['camTx','camTy','camTz'].forEach(id => {
+  document.getElementById(id).addEventListener('input', e => {
+    const axis = id.slice(-1);
+    controls.target[axis] = parseFloat(e.target.value);
+    document.getElementById(id + 'Val').textContent = parseFloat(e.target.value).toFixed(3);
+    controls.update();
+  });
+});
+
+// Sync sliders when panel opens
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('uiPanel').style.display === 'block') syncCamSliders();
+});
+
+document.getElementById('copyCamBtn').addEventListener('click', () => {
+  const txt = `camera.position.set(${camera.position.x.toFixed(4)}, ${camera.position.y.toFixed(4)}, ${camera.position.z.toFixed(4)});\ncontrols.target.set(${controls.target.x.toFixed(4)}, ${controls.target.y.toFixed(4)}, ${controls.target.z.toFixed(4)});`;
+  navigator.clipboard.writeText(txt).then(() => {
+    const note = document.getElementById('camCopyNote');
+    note.style.display = 'block';
+    setTimeout(() => note.style.display = 'none', 2000);
+  });
 });
 
 document.getElementById('setHotspotBtn').addEventListener('click', () => {
