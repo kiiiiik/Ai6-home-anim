@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TERRAIN / VISUALISATION</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F2F3FF;
+    --panel-bg: rgba(10, 14, 22, 0.88);
+    --panel-border: rgba(91, 123, 255, 0.2);
+    --text: #e0e6ff;
+    --accent: #5B7BFF;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: var(--bg); color: var(--text); font-family: 'IBM Plex Mono', monospace; overflow: hidden; }
+  /* Scroll sentinel — élément haut pour capter le wheel sans scrollbar visible */
+  #canvas { position: fixed; inset: 0; display: block; z-index: 0; }
+
+  /* Fade — haut uniquement */
+  #fadeOverlay {
+    position: fixed; inset: 0; z-index: 1; pointer-events: none;
+    background: linear-gradient(to bottom, var(--bg) 0%, transparent 30%);
+    opacity: 1;
+  }
+
+  /* Bokeh — backdrop-filter masqué */
+  #bokehOverlay {
+    position: fixed; inset: 0; z-index: 2; pointer-events: none;
+    display: none;
+  }
+  #annotCanvas { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
+
+  /* Scroll hint */
+  #scrollHint {
+    position: fixed; bottom: 36px; left: 50%; transform: translateX(-50%);
+    font-size: 9px; letter-spacing: 0.25em; color: var(--accent);
+    opacity: 0; transition: opacity 0.8s; pointer-events: none; z-index: 10;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  #scrollHint.visible { opacity: 0.7; }
+  #scrollHint svg { animation: bounce 1.6s ease-in-out infinite; }
+  @keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(5px); } }
+
+  .panel {
+    position: fixed; top: 24px; right: 24px; width: 300px;
+    background: var(--panel-bg); backdrop-filter: blur(20px);
+    border: 1px solid var(--panel-border); padding: 20px;
+    font-size: 11px; z-index: 10; display: none;
+    max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+  }
+  .group-title { font-size: 9px; letter-spacing: 0.2em; color: #7a82a8; margin: 15px 0 10px 0; display: flex; align-items: center; gap: 8px; text-transform: uppercase; }
+  .group-title::after { content: ''; flex: 1; height: 1px; background: var(--panel-border); }
+  .control { margin-bottom: 10px; }
+  .control label { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .control label .value { color: var(--accent); font-weight: 600; }
+  input[type="range"] { -webkit-appearance: none; width: 100%; height: 1px; background: #1f2d7a; outline: none; }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: var(--accent); border-radius: 50%; cursor: pointer; }
+  .color-control { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .color-wrapper { width: 30px; height: 18px; border: 1px solid var(--panel-border); overflow: hidden; position: relative; }
+  input[type="color"] { position: absolute; width: 200%; height: 200%; top: -50%; left: -50%; cursor: pointer; border: none; background: none; }
+  .toggle-control { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .toggle-label { font-size: 11px; color: var(--text); }
+  .toggle-btn { width: 36px; height: 18px; background: #1f2d7a; border-radius: 9px; position: relative; cursor: pointer; border: 1px solid var(--panel-border); transition: background 0.2s; flex-shrink: 0; }
+  .toggle-btn.on { background: var(--accent); }
+  .toggle-btn::after { content: ''; position: absolute; width: 12px; height: 12px; border-radius: 50%; background: white; top: 2px; left: 2px; transition: transform 0.2s; }
+  .toggle-btn.on::after { transform: translateX(18px); }
+  .btn-row { display: flex; gap: 8px; margin-top: 8px; }
+  .btn { flex: 1; padding: 8px; background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 2px; font-family: inherit; font-size: 9px; font-weight: 600; letter-spacing: 0.1em; cursor: pointer; transition: background 0.2s, color 0.2s; text-align: center; }
+  .btn:hover { background: var(--accent); color: white; }
+  .btn-save { display: block; width: 100%; padding: 10px; background: var(--accent); color: white; border: none; border-radius: 2px; font-family: inherit; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; cursor: pointer; margin-top: 16px; transition: opacity 0.2s; }
+  .btn-save:hover { opacity: 0.8; }
+  .hint { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); font-size: 9px; color: var(--accent); letter-spacing: 0.2em; opacity: 0.6; pointer-events: none; }
+  .save-note { font-size: 9px; color: #7a82a8; margin-top: 8px; line-height: 1.5; }
+  .loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg); z-index: 200; }
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+<div id="fadeOverlay"></div>
+<div id="bokehOverlay"></div>
+<canvas id="annotCanvas"></canvas>
+
+<!-- Overlay transition scène -->
+<div id="transitionOverlay" style="position:fixed;inset:0;z-index:20;background:#F2F3FF;opacity:0;pointer-events:none;transition:opacity 0.05s;"></div>
+
+<!-- Scroll hint -->
+<div id="scrollHint">
+  <span>DÉFILER POUR EXPLORER</span>
+  <svg width="14" height="20" viewBox="0 0 14 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="1" y="1" width="12" height="18" rx="6" stroke="#5B7BFF" stroke-width="1.2"/>
+    <circle cx="7" cy="6" r="1.8" fill="#5B7BFF"/>
+  </svg>
+</div>
+
+<div class="hint">CONFIGURATEUR [ESC]</div>
+<div id="loading" class="loading"><div style="color:var(--accent); letter-spacing: 0.3em; font-size: 10px;">CHARGEMENT...</div></div>
+
+<div class="panel" id="uiPanel">
+  <div style="font-weight: 600; color: var(--accent); letter-spacing: 0.2em; margin-bottom: 20px; font-size: 12px;">PARAMÈTRES</div>
+
+  <div class="group-title">ÉCLAIRAGE</div>
+  <div class="control">
+    <label>Lumière ambiante <span class="value" id="ambientVal">1.35</span></label>
+    <input type="range" id="ambient" min="0" max="3" step="0.05" value="1.35">
+  </div>
+  <div class="control">
+    <label>Soleil <span class="value" id="sunVal">1.85</span></label>
+    <input type="range" id="sun" min="0" max="5" step="0.05" value="1.85">
+  </div>
+  <div class="control">
+    <label>Azimut <span class="value" id="sunAzVal">233</span>°</label>
+    <input type="range" id="sunAz" min="0" max="360" step="1" value="233">
+  </div>
+  <div class="control">
+    <label>Élévation <span class="value" id="sunElVal">90</span>°</label>
+    <input type="range" id="sunEl" min="0" max="90" step="1" value="90">
+  </div>
+
+  <div class="group-title">FOND DE CARTE</div>
+  <div class="control">
+    <label>Début du Fog <span class="value" id="fogStartVal">20</span></label>
+    <input type="range" id="fogStart" min="0" max="20" step="0.1" value="20">
+  </div>
+  <div class="control">
+    <label>Hauteur fade <span class="value" id="fadeHeightVal">30</span>%</label>
+    <input type="range" id="fadeHeight" min="0" max="100" step="1" value="30">
+  </div>
+  <div class="control">
+    <label>Intensité fade <span class="value" id="fadeOpacityVal">1.00</span></label>
+    <input type="range" id="fadeOpacity" min="0" max="1" step="0.01" value="1">
+  </div>
+
+  <div class="group-title">BOKEH / FOCUS</div>
+  <div class="toggle-control">
+    <span class="toggle-label">Activer le bokeh</span>
+    <div class="toggle-btn on" id="bokehToggle"></div>
+  </div>
+  <div id="bokehControls" style="display:block">
+    <div class="control">
+      <label>Intensité flou <span class="value" id="bokehBlurVal">30</span>px</label>
+      <input type="range" id="bokehBlur" min="1" max="30" step="1" value="30">
+    </div>
+    <div class="control">
+      <label>Rayon net <span class="value" id="bokehRadiusVal">59</span>%</label>
+      <input type="range" id="bokehRadius" min="5" max="70" step="1" value="59">
+    </div>
+    <div class="control">
+      <label>Douceur transition <span class="value" id="bokehSoftnessVal">25</span>%</label>
+      <input type="range" id="bokehSoftness" min="0" max="80" step="1" value="25">
+    </div>
+    <div class="btn-row">
+      <div class="btn" id="setFocusBtn">PLACER LE FOCUS</div>
+    </div>
+    <p class="save-note" id="focusHint" style="display:none">Cliquez sur la carte pour placer le point de focus</p>
+  </div>
+
+  <div class="group-title">TOPOGRAPHIE</div>
+  <div class="control">
+    <label>Rapprochement <span class="value" id="topoSpacingVal">94</span></label>
+    <input type="range" id="topoSpacing" min="10" max="300" step="1" value="94">
+  </div>
+  <div class="control">
+    <label>Finesse <span class="value" id="topoWidthVal">0.10</span></label>
+    <input type="range" id="topoWidth" min="0.05" max="1.5" step="0.05" value="0.10">
+  </div>
+  <div class="color-control">
+    <label>Couleur traits</label>
+    <div class="color-wrapper"><input type="color" id="topoColor" value="#6289ff"></div>
+  </div>
+
+  <div class="group-title">ALTITUDES</div>
+  <div class="toggle-control">
+    <span class="toggle-label">Afficher les altitudes</span>
+    <div class="toggle-btn on" id="altToggle"></div>
+  </div>
+  <div class="control">
+    <label>Vitesse animation <span class="value" id="altSpeedVal">0.30</span></label>
+    <input type="range" id="altSpeed" min="0.01" max="2" step="0.01" value="0.30">
+  </div>
+  <div class="control">
+    <label>Taille du texte <span class="value" id="altFontSizeVal">11</span>px</label>
+    <input type="range" id="altFontSize" min="7" max="20" step="1" value="11">
+  </div>
+  <div class="color-control">
+    <label>Couleur altitudes</label>
+    <div class="color-wrapper"><input type="color" id="altColor" value="#5B7BFF"></div>
+  </div>
+
+  <div class="group-title">POINTS</div>
+  <div class="control">
+    <label>Densité <span class="value" id="densityVal">202</span></label>
+    <input type="range" id="density" min="50" max="600" step="1" value="202">
+  </div>
+  <div class="control">
+    <label>Taille <span class="value" id="pointSizeVal">0.025</span></label>
+    <input type="range" id="pointSize" min="0.005" max="0.1" step="0.001" value="0.005">
+  </div>
+  <div class="color-control">
+    <label>Couleur base</label>
+    <div class="color-wrapper"><input type="color" id="pointColor" value="#0033FF"></div>
+  </div>
+
+  <div class="group-title">ONDE</div>
+  <div class="control">
+    <label>Vitesse <span class="value" id="waveSpeedVal">0.5</span></label>
+    <input type="range" id="waveSpeed" min="0.1" max="5.0" step="0.1" value="0.5">
+  </div>
+  <div class="control">
+    <label>Fréquence <span class="value" id="waveSizeVal">0.8</span></label>
+    <input type="range" id="waveSize" min="0.5" max="10.0" step="0.1" value="0.8">
+  </div>
+  <div class="control">
+    <label>Grossissement <span class="value" id="waveSizeBoostVal">1.5</span>×</label>
+    <input type="range" id="waveSizeBoost" min="0" max="5" step="0.1" value="1.5">
+  </div>
+  <div class="color-control">
+    <label>Couleur onde</label>
+    <div class="color-wrapper"><input type="color" id="waveColor" value="#85ffe7"></div>
+  </div>
+
+  <div class="group-title">CAMÉRA</div>
+  <div class="control">
+    <label>Pos X <span class="value" id="camPxVal">1.179</span></label>
+    <input type="range" id="camPx" min="-10" max="10" step="0.001" value="1.179">
+  </div>
+  <div class="control">
+    <label>Pos Y <span class="value" id="camPyVal">1.808</span></label>
+    <input type="range" id="camPy" min="-5" max="15" step="0.001" value="1.808">
+  </div>
+  <div class="control">
+    <label>Pos Z <span class="value" id="camPzVal">2.840</span></label>
+    <input type="range" id="camPz" min="-10" max="10" step="0.001" value="2.840">
+  </div>
+  <div class="control">
+    <label>Cible X <span class="value" id="camTxVal">-0.361</span></label>
+    <input type="range" id="camTx" min="-5" max="5" step="0.001" value="-0.361">
+  </div>
+  <div class="control">
+    <label>Cible Y <span class="value" id="camTyVal">0.285</span></label>
+    <input type="range" id="camTy" min="-5" max="5" step="0.001" value="0.285">
+  </div>
+  <div class="control">
+    <label>Cible Z <span class="value" id="camTzVal">0.235</span></label>
+    <input type="range" id="camTz" min="-5" max="5" step="0.001" value="0.235">
+  </div>
+  <div class="btn-row" style="margin-bottom:8px">
+    <div class="btn" id="copyCamBtn">COPIER POSITION</div>
+  </div>
+  <p class="save-note" id="camCopyNote" style="display:none;color:var(--accent)">Position copiée ✓</p>
+
+  <div class="group-title">MAISONS</div>
+  <div class="control">
+    <label>Opacité <span class="value" id="houseAlphaVal">1.0</span></label>
+    <input type="range" id="houseAlpha" min="0" max="1" step="0.05" value="1">
+  </div>
+  <div class="color-control">
+    <label>Couleur</label>
+    <div class="color-wrapper"><input type="color" id="houseColor" value="#85a3ff"></div>
+  </div>
+
+  <button class="btn-save" id="saveBtn">SAUVEGARDER CONFIG</button>
+  <p class="save-note">Config encodée dans l'URL — copiez l'adresse pour la partager ou la conserver.</p>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+    "three-mesh-bvh": "https://unpkg.com/three-mesh-bvh@0.7.0/build/index.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
+
+THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
+THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
+THREE.Mesh.prototype.raycast = acceleratedRaycast;
+
+/* ====================== SCENE ====================== */
+const scene = new THREE.Scene();
+const bgColor = new THREE.Color(0xF2F3FF);
+scene.background = bgColor;
+scene.fog = new THREE.Fog(bgColor, 20.0, 31.0);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(1.6610, 1.7990, 3.0290);
+
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(-0.2920, 0.2850, 0.2350);
+controls.enableRotate = false; controls.enableZoom = false; controls.enablePan = false;
+controls.enableDamping = true;
+
+const ambientLight = new THREE.AmbientLight(0xffffff, 1.35);
+scene.add(ambientLight);
+const sun = new THREE.DirectionalLight(0xffffff, 1.85);
+sun.position.set(5, 10, 5);
+scene.add(sun);
+// Position initiale calculée depuis les valeurs par défaut (az=45°, el=63°)
+// sera recalculée par updateSunPosition() après init UI
+
+/* ====================== SHADERS ====================== */
+const topoUniforms = {
+  uColor: { value: new THREE.Color(0x6289FF) },
+  uSpacing: { value: 94.0 },
+  uLineWidth: { value: 0.1 },
+  uReveal: { value: 0.0 },          // 0 = flat, 1 = full terrain
+  uTopoRevealDist: { value: 0.0 }   // topo lines draw from cam to back
+};
+const waveUniforms = {
+  uTime: { value: 0 },
+  uBaseColor: { value: new THREE.Color(0x0033ff) },
+  uWaveColor: { value: new THREE.Color(0x85ffe7) },
+  uWaveSpeed: { value: 0.5 },
+  uWaveSize: { value: 0.8 },
+  uPointSize: { value: 0.005 },
+  // Wave origins (up to 3, in parallaxGroup local XZ space)
+  uWaveOrigin0: { value: new THREE.Vector2(0, 0) },
+  uWaveOrigin1: { value: new THREE.Vector2(0, 0) },
+  uWaveOrigin2: { value: new THREE.Vector2(0, 0) },
+  uWavePhase0:  { value: 0.0 },
+  uWavePhase1:  { value: 2.1 },
+  uWavePhase2:  { value: 4.3 },
+  uWaveWeight0: { value: 1.0 },  // 1.0 = active, 0.0 = inactive
+  uWaveWeight1: { value: 0.0 },
+  uWaveWeight2: { value: 0.0 },
+  uScreenHeight: { value: window.innerHeight },
+  uRevealRadius: { value: -1.0 },   // wave front radius (-1 = nothing visible)
+  uRevealOrigin: { value: new THREE.Vector2(0, 0) },  // XZ wave source
+  uTerrainReveal: { value: 0.0 },    // synced with topoUniforms.uReveal for Y scaling
+  uWaveSizeBoost: { value: 1.5 }     // grossissement des points au passage de l'onde (0 = aucun)
+};
+
+const topoMaterial = new THREE.ShaderMaterial({
+  uniforms: { ...topoUniforms, ...THREE.UniformsLib['fog'] },
+  vertexShader: `
+    #include <fog_pars_vertex>
+    uniform float uReveal;
+    varying float vY;
+    varying float vViewDist;
+    void main() {
+      vec3 pos = position;
+      pos.y *= uReveal;
+      vY = pos.y;
+      vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+      vViewDist = length(mvPosition.xyz);
+      gl_Position = projectionMatrix * mvPosition;
+      #include <fog_vertex>
+    }
+  `,
+  fragmentShader: `
+    #include <fog_pars_fragment>
+    uniform vec3 uColor;
+    uniform float uSpacing;
+    uniform float uLineWidth;
+    uniform float uTopoRevealDist;
+    varying float vY;
+    varying float vViewDist;
+    void main() {
+      // Draw topo lines progressively from camera outward
+      float drawEdge = smoothstep(uTopoRevealDist, uTopoRevealDist - 0.6, vViewDist);
+      if (drawEdge < 0.01) discard;
+      float coord = vY * uSpacing;
+      float fraction = fract(coord);
+      float dist = abs(fraction - 0.5);
+      float delta = fwidth(coord);
+      float line = smoothstep(delta * (uLineWidth + 0.5), delta * (uLineWidth - 0.5), dist);
+      if (line < 0.1) discard;
+      gl_FragColor = vec4(uColor, line * drawEdge);
+      #include <fog_fragment>
+    }
+  `,
+  transparent: true, side: THREE.DoubleSide, extensions: { derivatives: true }
+});
+
+/* ====================== ALTITUDE ANNOTATIONS ====================== */
+const annotCanvas = document.getElementById('annotCanvas');
+const annotCtx = annotCanvas.getContext('2d');
+let altitudePoints = [];
+let showAltitudes = true;
+
+// Alt mesh local positions extracted at load time (in parallaxGroup space)
+let altMeshLocalPositions = [];
+
+// Onde mesh local positions
+let ondeMeshLocalPositions = [];
+
+/* ====================== INTRO ANIMATION ====================== */
+let introPlaying = false;
+let introStart = 0;
+let annotReveal = 0;    // 0→1 controls annotation opacity
+let hotspotReveal = 0;  // 0→1 controls hotspot opacity
+
+// Camera intro: descend from sky
+const CAM_FINAL = new THREE.Vector3(1.6610, 1.7990, 3.0290);
+const CAM_START_Y = 4.6;    // hauteur de départ (réduite — caméra part de moins haut)
+const INTRO_DURATION = 5.2; // secondes (alignée sur la fin de la séquence d'apparition)
+
+// Timing des étapes d'apparition (secondes) — repris du back
+const I_OVERLAY_OUT   = [0.0,  0.8];  // loading overlay fades out
+const I_TERRAIN       = [0.5,  2.5];  // terrain + points montent
+const I_TOPO_DRAW     = [1.8,  3.8];  // traits se dessinent cam → fond
+const I_BUILDINGS     = [2.4,  4.2];  // maisons fade in (légèrement décalé après les traits topo)
+const I_ANNOT         = [3.5,  4.8];  // labels d'altitude
+const I_HOTSPOT       = [4.0,  5.2];  // hotspot
+
+function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
+function easeInOut(t) { return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; }
+
+function phase(elapsed, start, end) {
+  return Math.max(0, Math.min(1, (elapsed - start) / (end - start)));
+}
+
+function updateIntro(elapsed) {
+  if (!introPlaying) return;
+
+  // Loading overlay fade out
+  const loadingEl = document.getElementById('loading');
+  const overlayT = phase(elapsed, ...I_OVERLAY_OUT);
+  loadingEl.style.opacity = 1 - overlayT;
+  if (overlayT >= 1) loadingEl.style.display = 'none';
+
+  // --- Caméra : descend depuis le ciel sur toute l'intro (mouvement conservé) ---
+  const camT = easeOut(phase(elapsed, 0.0, INTRO_DURATION));
+  camera.position.x = CAM_FINAL.x;
+  camera.position.y = CAM_START_Y + (CAM_FINAL.y - CAM_START_Y) * camT;
+  camera.position.z = CAM_FINAL.z;
+
+  // --- Terrain + points montent ensemble (Y scaling) ---
+  const terrainT = easeOut(phase(elapsed, ...I_TERRAIN));
+  topoUniforms.uReveal.value = terrainT;
+  waveUniforms.uTerrainReveal.value = terrainT;
+
+  // --- Onde radiale sur les points (démarre légèrement après le terrain, depuis le hotspot) ---
+  const pointsT = easeInOut(phase(elapsed, I_TERRAIN[0] + 0.3, I_TERRAIN[1] + 0.4));
+  waveUniforms.uRevealRadius.value = pointsT * 12.0 - 0.2;
+
+  // --- Lignes topo se dessinent de la caméra vers le fond ---
+  const topoT = easeInOut(phase(elapsed, ...I_TOPO_DRAW));
+  topoUniforms.uTopoRevealDist.value = topoT * 15.0;
+
+  // --- Maisons fade in ---
+  const buildT = easeOut(phase(elapsed, ...I_BUILDINGS));
+  const houseAlpha = parseFloat(document.getElementById('houseAlpha').value);
+  housesGroup.traverse(c => {
+    if (c.isMesh && c.material) c.material.opacity = buildT * houseAlpha;
+  });
+
+  // --- Annotations + hotspot ---
+  annotReveal   = easeInOut(phase(elapsed, ...I_ANNOT));
+  hotspotReveal = easeInOut(phase(elapsed, ...I_HOTSPOT));
+
+  // Done — snap to final state
+  if (elapsed > INTRO_DURATION) {
+    introPlaying = false;
+    camera.position.copy(CAM_FINAL);
+    topoUniforms.uReveal.value = 1;
+    topoUniforms.uTopoRevealDist.value = 15.0;
+    waveUniforms.uTerrainReveal.value = 1;
+    waveUniforms.uRevealRadius.value = 12.0;
+    annotReveal = 1;
+    hotspotReveal = 1;
+    // Pas de reset de parallaxGroup.rotation — le parallax souris continue sans saut
+    const houseAlphaFinal = parseFloat(document.getElementById('houseAlpha').value);
+    housesGroup.traverse(c => { if (c.isMesh && c.material) c.material.opacity = houseAlphaFinal; });
+    showScrollHint();
+  }
+}
+
+function startIntro() {
+  introPlaying = true;
+  introStart = performance.now();
+  // État initial : terrain à plat, lignes topo non dessinées, points invisibles
+  topoUniforms.uReveal.value = 0;
+  topoUniforms.uTopoRevealDist.value = 0;
+  waveUniforms.uTerrainReveal.value = 0;
+  waveUniforms.uRevealRadius.value = -1.0;
+  annotReveal = 0;
+  hotspotReveal = 0;
+  // Positionner la caméra en hauteur (mouvement caméra conservé)
+  camera.position.set(CAM_FINAL.x, CAM_START_Y, CAM_FINAL.z);
+  housesGroup.traverse(c => { if (c.isMesh && c.material) c.material.opacity = 0; });
+  // Loading overlay
+  const loadingEl = document.getElementById('loading');
+  loadingEl.style.display = 'flex';
+  loadingEl.style.opacity = '1';
+}
+
+/* ====================== SCROLL ZOOM ====================== */
+// scrollT va de 0 (vue initiale) à 1 (zoom complet + fade)
+let scrollT = 0;          // valeur cible (0–1)
+let scrollTSmooth = 0;    // valeur lissée
+const SCROLL_SPEED = 0.003; // sensibilité wheel
+const SCROLL_LERP  = 0.10;  // douceur du lissage
+
+// Position caméra de départ (après intro) et position de fin (zoomée)
+// La fin sera recalculée une fois hotspotWorldPos connu
+let scrollCamEnd = new THREE.Vector3();
+let scrollTgtEnd = new THREE.Vector3();
+let scrollInitialized = false;
+
+function initScrollTargets() {
+  // Direction caméra → hotspot, on avance de 1.8 unités
+  const dir = hotspotWorldPos.clone().sub(CAM_FINAL).normalize();
+  scrollCamEnd.copy(CAM_FINAL).addScaledVector(dir, 1.8);
+  // Monter en Y pour un effet aérien (zoom plongeant)
+  scrollCamEnd.y += 0.6;
+  scrollTgtEnd.copy(hotspotWorldPos);
+  scrollInitialized = true;
+}
+
+// Scroll hint
+const scrollHintEl = document.getElementById('scrollHint');
+let scrollHintVisible = false;
+function showScrollHint() {
+  if (scrollHintVisible) return;
+  scrollHintVisible = true;
+  scrollHintEl.classList.add('visible');
+}
+function hideScrollHint() {
+  scrollHintEl.classList.remove('visible');
+  scrollHintVisible = false;
+}
+
+window.addEventListener('wheel', e => {
+  e.preventDefault();
+  scrollT = Math.max(0, Math.min(1, scrollT + e.deltaY * SCROLL_SPEED));
+}, { passive: false });
+
+// Touch support
+let touchStartY = 0;
+window.addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; }, { passive: true });
+window.addEventListener('touchmove', e => {
+  const dy = touchStartY - e.touches[0].clientY;
+  touchStartY = e.touches[0].clientY;
+  scrollT = Math.max(0, Math.min(1, scrollT + dy * SCROLL_SPEED * 2));
+}, { passive: true });
+
+function updateScrollZoom() {
+  if (!scrollInitialized || introPlaying) return;
+
+  // Léger lissage
+  scrollTSmooth += (scrollT - scrollTSmooth) * 0.08;
+  const s = scrollTSmooth;
+
+  // Interpoler caméra
+  camera.position.lerpVectors(CAM_FINAL, scrollCamEnd, s);
+  controls.target.lerpVectors(new THREE.Vector3(-0.2920, 0.2850, 0.2350), scrollTgtEnd, s);
+
+  // Virage progressif du groupe au scroll (s'ajoute au parallax souris via scrollRotOffset)
+  scrollRotOffset = s * 0.35;
+
+  // Fade overlay (commence à 50% du scroll)
+  if (s > 0.5) {
+    const ft = Math.min((s - 0.5) / 0.5, 1);
+    transOverlay.style.opacity = ft;
+    transOverlay.style.pointerEvents = ft > 0.01 ? 'auto' : 'none';
+  } else {
+    transOverlay.style.opacity = 0;
+    transOverlay.style.pointerEvents = 'none';
+  }
+}
+
+// Anciens vars hotspot conservés pour compatibilité avec les fonctions existantes
+let hotspotLocalPos = new THREE.Vector3(0.4726725366978833, 0.4503095624359107, 1.0048503007874532);
+let hotspotWorldPos = new THREE.Vector3();
+let hotspotScreenPos = { x: 0, y: 0, behind: true };
+let hotspotHovered = false;
+let settingHotspot = false;
+const transOverlay = document.getElementById('transitionOverlay');
+let scrollRotOffset = 0; // virage progressif au scroll, s'additionne au parallax
+
+function detectHotspot(scene) {
+  // Look for a mesh named "zone1" or "hotspot" in any loaded scene
+  scene.traverse(node => {
+    if (/^(zone1|hotspot)$/i.test(node.name) && !hotspotLocalPos) {
+      node.visible = false;
+      const wp = new THREE.Vector3();
+      node.getWorldPosition(wp);
+      hotspotLocalPos = parallaxGroup.worldToLocal(wp.clone());
+    }
+  });
+}
+
+function initHotspotFallback(housesGrp) {
+  // Fallback: center of houses bounding box
+  if (hotspotLocalPos) return;
+  const bbox = new THREE.Box3().setFromObject(housesGrp);
+  if (!bbox.isEmpty()) {
+    const center = new THREE.Vector3();
+    bbox.getCenter(center);
+    hotspotLocalPos = parallaxGroup.worldToLocal(center);
+  }
+}
+
+function updateHotspotWorldPos() {
+  if (!hotspotLocalPos) return;
+  hotspotWorldPos.copy(hotspotLocalPos);
+  parallaxGroup.localToWorld(hotspotWorldPos);
+  hotspotScreenPos = projectToScreen(hotspotWorldPos);
+}
+
+function drawHotspot(time) {
+  // Hotspot supprimé — scroll-driven zoom à la place
+}
+
+// startSceneTransition / updateTransition remplacés par le système scroll
+
+function extractOndeMeshes(terrainScene) {
+  const found = [];
+  terrainScene.traverse(node => {
+    if (/^onde\d*$/i.test(node.name)) {
+      node.visible = false;
+      if (node.isMesh && node.material) {
+        node.material = node.material.clone();
+        node.material.visible = false;
+      }
+      const wp = new THREE.Vector3();
+      node.getWorldPosition(wp);
+      const lp = parallaxGroup.worldToLocal(wp.clone());
+      found.push({ localPos: lp, name: node.name });
+    }
+  });
+  found.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  ondeMeshLocalPositions = found.map(f => f.localPos);
+
+  // Update uniforms with random phases and XZ origins
+  const n = Math.min(ondeMeshLocalPositions.length, 3);
+  if (n > 0) {
+    const phases = [Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2];
+    const origins = [
+      ondeMeshLocalPositions[0] || new THREE.Vector3(),
+      ondeMeshLocalPositions[1] || new THREE.Vector3(),
+      ondeMeshLocalPositions[2] || new THREE.Vector3()
+    ];
+    waveUniforms.uWaveOrigin0.value.set(origins[0].x, origins[0].z);
+    waveUniforms.uWaveOrigin1.value.set(origins[1].x, origins[1].z);
+    waveUniforms.uWaveOrigin2.value.set(origins[2].x, origins[2].z);
+    waveUniforms.uWavePhase0.value = phases[0];
+    waveUniforms.uWavePhase1.value = phases[1];
+    waveUniforms.uWavePhase2.value = phases[2];
+    waveUniforms.uWaveWeight0.value = n >= 1 ? 1.0 : 0.0;
+    waveUniforms.uWaveWeight1.value = n >= 2 ? 1.0 : 0.0;
+    waveUniforms.uWaveWeight2.value = n >= 3 ? 1.0 : 0.0;
+  }
+}
+
+function extractAltMeshes(terrainScene) {
+  // Find all meshes whose name starts with "alt" (alt1, alt2, alt3…)
+  const found = [];
+  terrainScene.traverse(node => {
+    if (/^alt\d*$/i.test(node.name)) {
+      // Hide the mesh
+      node.visible = false;
+      if (node.isMesh && node.material) {
+        node.material = node.material.clone();
+        node.material.visible = false;
+      }
+      // Get world position then convert to parallaxGroup local space
+      const wp = new THREE.Vector3();
+      node.getWorldPosition(wp);
+      const lp = parallaxGroup.worldToLocal(wp.clone());
+      found.push({ localPos: lp, name: node.name });
+    }
+  });
+  // Sort by name (alt1, alt2, …)
+  found.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  altMeshLocalPositions = found.map(f => f.localPos);
+}
+
+function pickAltitudePoints() {
+  if (altMeshLocalPositions.length === 0) return;
+
+  // Determine Y range from terrain bbox for altitude mapping
+  let minY = Infinity, maxY = -Infinity;
+  altMeshLocalPositions.forEach(p => { if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y; });
+  // Also sample from collision mesh bounds if available
+  if (terrainCollisionMesh) {
+    const bbox = new THREE.Box3().setFromObject(terrainCollisionMesh);
+    minY = Math.min(minY, bbox.min.y);
+    maxY = Math.max(maxY, bbox.max.y);
+  }
+  const yRange = maxY - minY || 1;
+
+  const lineHeights = [28, 38, 50, 34, 60, 42, 26, 55, 32, 46, 44, 30];
+
+  altitudePoints = altMeshLocalPositions.map((localP, i) => {
+    const worldPos = localP.clone();
+    parallaxGroup.localToWorld(worldPos);
+    const baseAlt = ((localP.y - minY) / yRange) * 650 + 180;
+    return {
+      localPos: localP, worldPos,
+      baseAlt,
+      phase: (i / altMeshLocalPositions.length) * Math.PI * 2 + i * 0.37,
+      lineH: lineHeights[i % lineHeights.length],
+      side: i % 2 === 0 ? 1 : -1
+    };
+  });
+}
+
+function updateAltWorldPositions() {
+  altitudePoints.forEach(pt => {
+    const w = pt.localPos.clone();
+    parallaxGroup.localToWorld(w);
+    pt.worldPos.copy(w);
+  });
+}
+
+function projectToScreen(worldPos) {
+  const p = worldPos.clone();
+  p.project(camera);
+  return {
+    x: (p.x * 0.5 + 0.5) * annotCanvas.width,
+    y: (-p.y * 0.5 + 0.5) * annotCanvas.height,
+    behind: p.z > 1
+  };
+}
+
+function drawAnnotations(time) {
+  annotCanvas.width = window.innerWidth;
+  annotCanvas.height = window.innerHeight;
+  if (!showAltitudes || altitudePoints.length === 0) { drawHotspot(time); return; }
+
+  const color = document.getElementById('altColor').value;
+  const fontSize = parseInt(document.getElementById('altFontSize').value);
+  const speed = parseFloat(document.getElementById('altSpeed').value);
+
+  annotCtx.strokeStyle = color;
+  annotCtx.fillStyle = color;
+  annotCtx.lineWidth = 1;
+  annotCtx.font = `400 ${fontSize}px 'IBM Plex Mono', monospace`;
+  annotCtx.globalAlpha = annotReveal;
+
+  altitudePoints.forEach(pt => {
+    const sc = projectToScreen(pt.worldPos);
+    if (sc.behind) return;
+
+    const x = sc.x, y = sc.y;
+    const lh = pt.lineH;
+    const s = pt.side;
+
+    const drift = Math.sin(time * speed + pt.phase) * 3.7
+                + Math.sin(time * speed * 0.4 + pt.phase + 1.2) * 1.1;
+    const val = pt.baseAlt + drift;
+    const label = val.toFixed(1).replace('.', ',');
+
+    annotCtx.beginPath();
+    annotCtx.arc(x, y, 2, 0, Math.PI * 2);
+    annotCtx.fill();
+
+    const tickLen = 10;
+    annotCtx.beginPath();
+    annotCtx.moveTo(x, y - 3);
+    annotCtx.lineTo(x, y - lh);
+    annotCtx.lineTo(x + tickLen * s, y - lh);
+    annotCtx.stroke();
+
+    annotCtx.textAlign = s === 1 ? 'left' : 'right';
+    annotCtx.textBaseline = 'middle';
+    annotCtx.fillText(label, x + (tickLen + 4) * s, y - lh);
+  });
+  annotCtx.globalAlpha = 1;
+  drawHotspot(time);
+}
+
+const fadeOverlay = document.getElementById('fadeOverlay');
+function updateFade() {
+  const h = document.getElementById('fadeHeight').value;
+  const op = document.getElementById('fadeOpacity').value;
+  fadeOverlay.style.background = `linear-gradient(to bottom, var(--bg) 0%, transparent ${h}%)`;
+  fadeOverlay.style.opacity = op;
+}
+
+/* ====================== BOKEH (CSS backdrop-filter) ====================== */
+const bokehOverlay = document.getElementById('bokehOverlay');
+const focusCursor = document.getElementById('focusCursor');
+let bokehEnabled = true;
+let focusX = 46.328125, focusY = 63.92552366175329; // % position
+let settingFocus = false;
+
+function updateBokeh() {
+  if (!bokehEnabled) { bokehOverlay.style.display = 'none'; return; }
+  const blur = document.getElementById('bokehBlur').value;
+  const radius = document.getElementById('bokehRadius').value;
+  const softness = document.getElementById('bokehSoftness').value;
+  const inner = Math.max(0, parseInt(radius) - parseInt(softness) * 0.5);
+  const outer = parseInt(radius) + parseInt(softness) * 0.5;
+  const aspect = window.innerHeight / window.innerWidth;
+  const rx = outer;
+  const ry = outer * (window.innerWidth / window.innerHeight);
+
+  const mask = `radial-gradient(ellipse ${rx}% ${ry}% at ${focusX}% ${focusY}%, transparent ${inner}%, black ${outer}%)`;
+  bokehOverlay.style.display = 'block';
+  bokehOverlay.style.backdropFilter = `blur(${blur}px)`;
+  bokehOverlay.style.webkitBackdropFilter = `blur(${blur}px)`;
+  bokehOverlay.style.webkitMaskImage = mask;
+  bokehOverlay.style.maskImage = mask;
+}
+
+// Focus placement
+document.getElementById('setFocusBtn').addEventListener('click', () => {
+  settingFocus = !settingFocus;
+  document.getElementById('setFocusBtn').textContent = settingFocus ? 'ANNULER' : 'PLACER LE FOCUS';
+  document.getElementById('focusHint').style.display = settingFocus ? 'block' : 'none';
+  document.body.classList.toggle('focus-mode', settingFocus);
+  focusCursor.style.display = settingFocus ? 'block' : 'none';
+});
+
+document.addEventListener('mousemove', e => {
+  if (!settingFocus) return;
+  focusCursor.style.left = e.clientX + 'px';
+  focusCursor.style.top = e.clientY + 'px';
+});
+
+document.getElementById('canvas').addEventListener('click', e => {
+  if (!settingFocus) return;
+  focusX = (e.clientX / window.innerWidth) * 100;
+  focusY = (e.clientY / window.innerHeight) * 100;
+  settingFocus = false;
+  document.getElementById('setFocusBtn').textContent = 'PLACER LE FOCUS';
+  document.getElementById('focusHint').style.display = 'none';
+  document.body.classList.remove('focus-mode');
+  focusCursor.style.display = 'none';
+  updateBokeh();
+});
+
+document.getElementById('bokehToggle').addEventListener('click', () => {
+  bokehEnabled = !bokehEnabled;
+  document.getElementById('bokehToggle').classList.toggle('on', bokehEnabled);
+  document.getElementById('bokehControls').style.display = bokehEnabled ? 'block' : 'none';
+  updateBokeh();
+});
+['bokehBlur', 'bokehRadius', 'bokehSoftness'].forEach(id => {
+  document.getElementById(id).addEventListener('input', e => {
+    document.getElementById(id + 'Val').textContent = e.target.value;
+    updateBokeh();
+  });
+});
+
+/* ====================== CONFIG SAVE/LOAD ====================== */
+function collectConfig() {
+  const config = {};
+  document.querySelectorAll('input').forEach(inp => config[inp.id] = inp.value);
+  config['altToggleOn'] = showAltitudes;
+  config['bokehOn'] = bokehEnabled;
+  config['focusX'] = focusX;
+  config['focusY'] = focusY;
+  if (hotspotLocalPos) {
+    config['hotspotLX'] = hotspotLocalPos.x;
+    config['hotspotLY'] = hotspotLocalPos.y;
+    config['hotspotLZ'] = hotspotLocalPos.z;
+  }
+  return config;
+}
+
+function encodeConfig(cfg) {
+  try { return btoa(unescape(encodeURIComponent(JSON.stringify(cfg)))); } catch(e) { return ''; }
+}
+function decodeConfig(str) {
+  try { return JSON.parse(decodeURIComponent(escape(atob(str)))); } catch(e) { return null; }
+}
+
+function applyConfig(config) {
+  for (const id in config) {
+    const el = document.getElementById(id);
+    if (el && el.tagName === 'INPUT') {
+      el.value = config[id];
+      const valEl = document.getElementById(id + 'Val');
+      if (valEl) valEl.textContent = parseFloat(config[id]) === parseFloat(config[id])
+        ? config[id]
+        : config[id];
+    }
+  }
+  if (config['altToggleOn'] !== undefined) {
+    showAltitudes = config['altToggleOn'] === true || config['altToggleOn'] === 'true';
+    document.getElementById('altToggle').classList.toggle('on', showAltitudes);
+  }
+  if (config['bokehOn'] !== undefined) {
+    bokehEnabled = config['bokehOn'] === true || config['bokehOn'] === 'true';
+    document.getElementById('bokehToggle').classList.toggle('on', bokehEnabled);
+    document.getElementById('bokehControls').style.display = bokehEnabled ? 'block' : 'none';
+  }
+  if (config['focusX'] !== undefined) focusX = parseFloat(config['focusX']);
+  if (config['focusY'] !== undefined) focusY = parseFloat(config['focusY']);
+
+  if (config['hotspotLX'] !== undefined) {
+    hotspotLocalPos = new THREE.Vector3(
+      parseFloat(config['hotspotLX']),
+      parseFloat(config['hotspotLY']),
+      parseFloat(config['hotspotLZ'])
+    );
+  }
+
+  if (config['ambient']) ambientLight.intensity = parseFloat(config['ambient']);
+  if (config['sun']) sun.intensity = parseFloat(config['sun']);
+  if (config['sunAz'] || config['sunEl']) updateSunPosition();
+
+  // Sync Three.js uniforms
+  scene.fog.near = parseFloat(config['fogStart'] || 20);
+  scene.fog.far = scene.fog.near + 11.0;
+  topoUniforms.uSpacing.value = parseFloat(config['topoSpacing'] || 150);
+  topoUniforms.uLineWidth.value = parseFloat(config['topoWidth'] || 0.1);
+  if (config['topoColor']) topoUniforms.uColor.value.set(config['topoColor']);
+  waveUniforms.uPointSize.value = parseFloat(config['pointSize'] || 0.025);
+  if (config['pointColor']) waveUniforms.uBaseColor.value.set(config['pointColor']);
+  waveUniforms.uWaveSpeed.value = parseFloat(config['waveSpeed'] || 0.5);
+  waveUniforms.uWaveSize.value = parseFloat(config['waveSize'] || 0.8);
+  if (config['waveColor']) waveUniforms.uWaveColor.value.set(config['waveColor']);
+}
+
+function loadSavedConfig() {
+  // Priority: URL hash > localStorage
+  const hash = window.location.hash.slice(1);
+  let config = null;
+  if (hash) config = decodeConfig(hash);
+  if (!config) {
+    const ls = localStorage.getItem('terrain_config_v2');
+    if (ls) try { config = JSON.parse(ls); } catch(e) {}
+  }
+  if (config) applyConfig(config);
+}
+
+document.getElementById('saveBtn').addEventListener('click', () => {
+  const config = collectConfig();
+  // Save to localStorage
+  localStorage.setItem('terrain_config_v2', JSON.stringify(config));
+  // Encode into URL hash
+  const encoded = encodeConfig(config);
+  history.replaceState(null, '', '#' + encoded);
+
+  const btn = document.getElementById('saveBtn');
+  btn.textContent = 'CONFIG SAUVEGARDÉE ✓';
+  setTimeout(() => btn.textContent = 'SAUVEGARDER CONFIG', 2000);
+});
+
+/* ====================== SCENE OBJECTS ====================== */
+let terrainCollisionMesh, pointsObject;
+const housesGroup = new THREE.Group();
+const parallaxGroup = new THREE.Group();
+scene.add(parallaxGroup);
+parallaxGroup.add(housesGroup);
+
+function updateHouses() {
+  const color = new THREE.Color(document.getElementById('houseColor').value);
+  const alpha = parseFloat(document.getElementById('houseAlpha').value);
+  housesGroup.traverse(c => {
+    if (c.isMesh) {
+      const scaleY = housesGroup.scale.y; // preserve current intro scale
+      c.material = new THREE.MeshStandardMaterial({ color, transparent: true, opacity: alpha, fog: true });
+    }
+  });
+}
+
+function regenerateGrid() {
+  if (!terrainCollisionMesh) return;
+  if (pointsObject) parallaxGroup.remove(pointsObject);
+
+  const density = parseInt(document.getElementById('density').value);
+  const bbox = new THREE.Box3().setFromObject(terrainCollisionMesh);
+  const size = bbox.getSize(new THREE.Vector3());
+  const nx = density, nz = Math.round(density * (size.z / size.x));
+  const stepX = size.x / nx, stepZ = size.z / nz;
+  const positions = [];
+  const raycaster = new THREE.Raycaster();
+  const down = new THREE.Vector3(0, -1, 0);
+
+  for (let i = 0; i <= nx; i++) {
+    for (let j = 0; j <= nz; j++) {
+      const x = bbox.min.x + i * stepX;
+      const z = bbox.min.z + j * stepZ;
+      raycaster.set(new THREE.Vector3(x, bbox.max.y + 1, z), down);
+      const hits = raycaster.intersectObject(terrainCollisionMesh, true);
+      if (hits.length > 0) positions.push(hits[0].point.x, hits[0].point.y, hits[0].point.z);
+    }
+  }
+
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  pointsObject = new THREE.Points(geom, new THREE.ShaderMaterial({
+    uniforms: { ...waveUniforms, ...THREE.UniformsLib['fog'], uTexture: { value: createTex() } },
+    vertexShader: `
+      #include <fog_pars_vertex>
+      uniform float uTime; uniform float uWaveSpeed; uniform float uWaveSize; uniform float uPointSize;
+      uniform vec2 uWaveOrigin0; uniform vec2 uWaveOrigin1; uniform vec2 uWaveOrigin2;
+      uniform float uWavePhase0; uniform float uWavePhase1; uniform float uWavePhase2;
+      uniform float uWaveWeight0; uniform float uWaveWeight1; uniform float uWaveWeight2;
+      uniform float uScreenHeight;
+      uniform float uRevealRadius;
+      uniform vec2  uRevealOrigin;
+      uniform float uTerrainReveal;
+      uniform float uWaveSizeBoost;
+      varying float vWave;
+      varying float vAlpha;
+      void main() {
+        vec3 pos = position;
+        pos.y *= uTerrainReveal;
+        float t = uTime * uWaveSpeed * 3.0;
+        float totalW = uWaveWeight0 + uWaveWeight1 + uWaveWeight2;
+        float w = 0.0;
+        w += uWaveWeight0 * sin(distance(pos.xz, uWaveOrigin0) * uWaveSize - t + uWavePhase0);
+        w += uWaveWeight1 * sin(distance(pos.xz, uWaveOrigin1) * uWaveSize - t + uWavePhase1);
+        w += uWaveWeight2 * sin(distance(pos.xz, uWaveOrigin2) * uWaveSize - t + uWavePhase2);
+        w /= max(totalW, 1.0);
+        vWave = smoothstep(0.3, 1.0, w);
+        // Radial wave-reveal: points appear as wave front sweeps outward
+        float d = distance(pos.xz, uRevealOrigin);
+        vAlpha = smoothstep(0.0, 0.35, uRevealRadius - d);
+        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+        // Taille proportionnelle à la hauteur réelle de l'écran, grossissement au passage de l'onde
+        float sizeMultiplier = 1.0 + uWaveSizeBoost * vWave;
+        gl_PointSize = uPointSize * sizeMultiplier * (uScreenHeight / -mvPosition.z);
+        gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }
+    `,
+    fragmentShader: `
+      #include <fog_pars_fragment>
+      uniform vec3 uBaseColor; uniform vec3 uWaveColor; uniform sampler2D uTexture;
+      varying float vWave;
+      varying float vAlpha;
+      void main() {
+        vec3 color = mix(uBaseColor, uWaveColor, vWave);
+        vec4 tex = texture2D(uTexture, gl_PointCoord);
+        if (tex.a < 0.1) discard;
+        gl_FragColor = vec4(color, tex.a * vAlpha);
+        #include <fog_fragment>
+      }
+    `,
+    transparent: true, depthWrite: false
+  }));
+  parallaxGroup.add(pointsObject);
+  pickAltitudePoints();
+}
+
+function createTex() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.beginPath(); x.arc(32, 32, 30, 0, Math.PI * 2); x.fill();
+  return new THREE.CanvasTexture(c);
+}
+
+async function load() {
+  const loader = new GLTFLoader();
+  const [tData, mData] = await Promise.all([
+    loader.loadAsync('terrain.glb'),
+    loader.loadAsync('maisons.glb')
+  ]);
+
+  const tCol = tData.scene.clone();
+  tCol.traverse(c => { if (c.isMesh) { c.geometry.computeBoundsTree(); c.visible = false; } });
+  parallaxGroup.add(tCol);
+  terrainCollisionMesh = tCol;
+
+  // Extract & hide alt* and onde* meshes BEFORE applying topo material
+  extractAltMeshes(tData.scene);
+  extractOndeMeshes(tData.scene);
+  detectHotspot(tData.scene);
+  detectHotspot(mData.scene);
+
+  tData.scene.traverse(c => {
+    if (c.isMesh && c.visible !== false) c.material = topoMaterial;
+  });
+  parallaxGroup.add(tData.scene);
+  housesGroup.add(mData.scene);
+  initHotspotFallback(housesGroup);
+  // Set wave reveal origin AND wave origins to hotspot XZ position
+  if (hotspotLocalPos) {
+    const hx = hotspotLocalPos.x, hz = hotspotLocalPos.z;
+    waveUniforms.uRevealOrigin.value.set(hx, hz);
+    waveUniforms.uWaveOrigin0.value.set(hx, hz);
+    waveUniforms.uWaveOrigin1.value.set(hx, hz);
+    waveUniforms.uWaveOrigin2.value.set(hx, hz);
+    waveUniforms.uWaveWeight0.value = 1.0;
+    waveUniforms.uWaveWeight1.value = 0.0;
+    waveUniforms.uWaveWeight2.value = 0.0;
+  }
+
+  loadSavedConfig();
+  updateHouses();
+  updateFade();
+  updateBokeh();
+  updateSunPosition();
+  regenerateGrid();
+  // Init scroll targets maintenant — hotspot est déjà connu
+  updateHotspotWorldPos();
+  initScrollTargets();
+  startIntro();
+}
+
+/* ====================== UI LISTENERS ====================== */
+const ui = document.getElementById('uiPanel');
+window.addEventListener('keydown', e => { if (e.key === 'Escape') ui.style.display = ui.style.display === 'block' ? 'none' : 'block'; });
+
+function updateSunPosition() {
+  const az = parseFloat(document.getElementById('sunAz').value) * Math.PI / 180;
+  const el = parseFloat(document.getElementById('sunEl').value) * Math.PI / 180;
+  sun.position.set(
+    Math.cos(el) * Math.sin(az) * 10,
+    Math.sin(el) * 10,
+    Math.cos(el) * Math.cos(az) * 10
+  );
+}
+
+document.getElementById('ambient').addEventListener('input', e => {
+  ambientLight.intensity = parseFloat(e.target.value);
+  document.getElementById('ambientVal').textContent = e.target.value;
+});
+document.getElementById('sun').addEventListener('input', e => {
+  sun.intensity = parseFloat(e.target.value);
+  document.getElementById('sunVal').textContent = e.target.value;
+});
+
+document.getElementById('sunAz').addEventListener('input', e => {
+  document.getElementById('sunAzVal').textContent = e.target.value;
+  updateSunPosition();
+});
+document.getElementById('sunEl').addEventListener('input', e => {
+  document.getElementById('sunElVal').textContent = e.target.value;
+  updateSunPosition();
+});
+
+document.getElementById('fadeHeight').addEventListener('input', e => { document.getElementById('fadeHeightVal').textContent = e.target.value; updateFade(); });
+document.getElementById('fadeOpacity').addEventListener('input', e => { document.getElementById('fadeOpacityVal').textContent = parseFloat(e.target.value).toFixed(2); updateFade(); });
+document.getElementById('fogStart').addEventListener('input', e => { const v = parseFloat(e.target.value); scene.fog.near = v; scene.fog.far = v + 11.0; document.getElementById('fogStartVal').textContent = v; });
+document.getElementById('topoSpacing').addEventListener('input', e => { topoUniforms.uSpacing.value = parseFloat(e.target.value); document.getElementById('topoSpacingVal').textContent = e.target.value; });
+document.getElementById('topoWidth').addEventListener('input', e => { topoUniforms.uLineWidth.value = parseFloat(e.target.value); document.getElementById('topoWidthVal').textContent = e.target.value; });
+document.getElementById('topoColor').addEventListener('input', e => topoUniforms.uColor.value.set(e.target.value));
+document.getElementById('altToggle').addEventListener('click', () => { showAltitudes = !showAltitudes; document.getElementById('altToggle').classList.toggle('on', showAltitudes); });
+document.getElementById('altFontSize').addEventListener('input', e => document.getElementById('altFontSizeVal').textContent = e.target.value);
+document.getElementById('altSpeed').addEventListener('input', e => document.getElementById('altSpeedVal').textContent = parseFloat(e.target.value).toFixed(2));
+document.getElementById('density').addEventListener('change', regenerateGrid);
+document.getElementById('density').addEventListener('input', e => document.getElementById('densityVal').textContent = e.target.value);
+document.getElementById('pointSize').addEventListener('input', e => { waveUniforms.uPointSize.value = parseFloat(e.target.value); document.getElementById('pointSizeVal').textContent = e.target.value; });
+document.getElementById('pointColor').addEventListener('input', e => waveUniforms.uBaseColor.value.set(e.target.value));
+document.getElementById('waveSpeed').addEventListener('input', e => { waveUniforms.uWaveSpeed.value = parseFloat(e.target.value); document.getElementById('waveSpeedVal').textContent = e.target.value; });
+document.getElementById('waveSize').addEventListener('input', e => { waveUniforms.uWaveSize.value = parseFloat(e.target.value); document.getElementById('waveSizeVal').textContent = e.target.value; });
+document.getElementById('waveSizeBoost').addEventListener('input', e => { waveUniforms.uWaveSizeBoost.value = parseFloat(e.target.value); document.getElementById('waveSizeBoostVal').textContent = e.target.value; });
+document.getElementById('waveColor').addEventListener('input', e => waveUniforms.uWaveColor.value.set(e.target.value));
+document.getElementById('houseAlpha').addEventListener('input', e => { updateHouses(); document.getElementById('houseAlphaVal').textContent = e.target.value; });
+document.getElementById('houseColor').addEventListener('input', updateHouses);
+
+/* ====================== ANIMATION ====================== */
+let mx = 0, my = 0;
+window.addEventListener('mousemove', e => {
+  if (settingFocus) return;
+  mx = (e.clientX / window.innerWidth - 0.5) * 0.4;
+  my = (e.clientY / window.innerHeight - 0.5) * 0.4;
+});
+
+document.getElementById('canvas').addEventListener('click', e => {
+  if (!settingFocus) return;
+  focusX = (e.clientX / window.innerWidth) * 100;
+  focusY = (e.clientY / window.innerHeight) * 100;
+  settingFocus = false;
+  document.getElementById('setFocusBtn').textContent = 'PLACER LE FOCUS';
+  document.getElementById('focusHint').style.display = 'none';
+  document.body.classList.remove('focus-mode');
+  focusCursor.style.display = 'none';
+  updateBokeh();
+});
+function syncCamSliders() {
+  document.getElementById('camPx').value = camera.position.x;
+  document.getElementById('camPy').value = camera.position.y;
+  document.getElementById('camPz').value = camera.position.z;
+  document.getElementById('camPxVal').textContent = camera.position.x.toFixed(3);
+  document.getElementById('camPyVal').textContent = camera.position.y.toFixed(3);
+  document.getElementById('camPzVal').textContent = camera.position.z.toFixed(3);
+  document.getElementById('camTx').value = controls.target.x;
+  document.getElementById('camTy').value = controls.target.y;
+  document.getElementById('camTz').value = controls.target.z;
+  document.getElementById('camTxVal').textContent = controls.target.x.toFixed(3);
+  document.getElementById('camTyVal').textContent = controls.target.y.toFixed(3);
+  document.getElementById('camTzVal').textContent = controls.target.z.toFixed(3);
+}
+
+['camPx','camPy','camPz'].forEach(id => {
+  document.getElementById(id).addEventListener('input', e => {
+    const axis = id.slice(-1); // x, y, z
+    camera.position[axis] = parseFloat(e.target.value);
+    document.getElementById(id + 'Val').textContent = parseFloat(e.target.value).toFixed(3);
+    controls.update();
+  });
+});
+['camTx','camTy','camTz'].forEach(id => {
+  document.getElementById(id).addEventListener('input', e => {
+    const axis = id.slice(-1);
+    controls.target[axis] = parseFloat(e.target.value);
+    document.getElementById(id + 'Val').textContent = parseFloat(e.target.value).toFixed(3);
+    controls.update();
+  });
+});
+
+// Sync sliders when panel opens
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('uiPanel').style.display === 'block') syncCamSliders();
+});
+
+document.getElementById('copyCamBtn').addEventListener('click', () => {
+  const txt = `camera.position.set(${camera.position.x.toFixed(4)}, ${camera.position.y.toFixed(4)}, ${camera.position.z.toFixed(4)});\ncontrols.target.set(${controls.target.x.toFixed(4)}, ${controls.target.y.toFixed(4)}, ${controls.target.z.toFixed(4)});`;
+  navigator.clipboard.writeText(txt).then(() => {
+    const note = document.getElementById('camCopyNote');
+    note.style.display = 'block';
+    setTimeout(() => note.style.display = 'none', 2000);
+  });
+});
+
+// (hotspot supprimé — scroll-driven zoom)
+
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  waveUniforms.uTime.value = t;
+
+  // Parallax souris — actif dès le début, virage scroll additionné
+  parallaxGroup.rotation.y += (mx * 0.12 + scrollRotOffset - parallaxGroup.rotation.y) * 0.1;
+  parallaxGroup.rotation.x += (my * 0.12 - parallaxGroup.rotation.x) * 0.1;
+
+  controls.update();
+  renderer.render(scene, camera);
+  if (introPlaying) updateIntro((performance.now() - introStart) / 1000);
+  else updateScrollZoom();
+  updateHotspotWorldPos();
+  updateAltWorldPositions();
+  drawAnnotations(t);
+
+  // Masquer le hint quand on scroll, le réafficher si on revient à 0
+  if (scrollT > 0.02) hideScrollHint();
+}
+
+load(); animate();
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  waveUniforms.uScreenHeight.value = window.innerHeight;
+  if (bokehEnabled) updateBokeh();
+});
+</script>
+</body>
+</html>

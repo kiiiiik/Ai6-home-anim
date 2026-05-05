@@ -17,6 +17,7 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: var(--bg); color: var(--text); font-family: 'IBM Plex Mono', monospace; overflow: hidden; }
+  /* Scroll sentinel — élément haut pour capter le wheel sans scrollbar visible */
   #canvas { position: fixed; inset: 0; display: block; z-index: 0; }
 
   /* Fade — haut uniquement */
@@ -31,16 +32,18 @@
     position: fixed; inset: 0; z-index: 2; pointer-events: none;
     display: none;
   }
-  /* Curseur focus quand en mode set-focus */
-  body.focus-mode { cursor: crosshair; }
-
   #annotCanvas { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
 
-  /* Focus crosshair indicator */
-  #focusCursor {
-    position: fixed; z-index: 4; pointer-events: none; display: none;
-    width: 40px; height: 40px; transform: translate(-50%, -50%);
+  /* Scroll hint */
+  #scrollHint {
+    position: fixed; bottom: 36px; left: 50%; transform: translateX(-50%);
+    font-size: 9px; letter-spacing: 0.25em; color: var(--accent);
+    opacity: 0; transition: opacity 0.8s; pointer-events: none; z-index: 10;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
   }
+  #scrollHint.visible { opacity: 0.7; }
+  #scrollHint svg { animation: bounce 1.6s ease-in-out infinite; }
+  @keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(5px); } }
 
   .panel {
     position: fixed; top: 24px; right: 24px; width: 300px;
@@ -48,7 +51,12 @@
     border: 1px solid var(--panel-border); padding: 20px;
     font-size: 11px; z-index: 10; display: none;
     max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+    scrollbar-width: thin; scrollbar-color: var(--accent) transparent;
   }
+  .panel::-webkit-scrollbar { width: 6px; }
+  .panel::-webkit-scrollbar-track { background: rgba(255,255,255,0.04); }
+  .panel::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 3px; }
+  .panel::-webkit-scrollbar-thumb:hover { background: #6289ff; }
   .group-title { font-size: 9px; letter-spacing: 0.2em; color: #7a82a8; margin: 15px 0 10px 0; display: flex; align-items: center; gap: 8px; text-transform: uppercase; }
   .group-title::after { content: ''; flex: 1; height: 1px; background: var(--panel-border); }
   .control { margin-bottom: 10px; }
@@ -78,27 +86,30 @@
 <body>
 
 <canvas id="canvas"></canvas>
+<canvas id="canvas2" style="position:fixed;inset:0;display:block;z-index:0;opacity:0;pointer-events:none;"></canvas>
 <div id="fadeOverlay"></div>
 <div id="bokehOverlay"></div>
 <canvas id="annotCanvas"></canvas>
 
-<!-- Overlay transition scène -->
-<div id="transitionOverlay" style="position:fixed;inset:0;z-index:20;background:#F2F3FF;opacity:0;pointer-events:none;transition:opacity 0.05s;"></div>
+<!-- transition gérée par opacité CSS des deux canvas -->
+<div id="whiteOverlay" style="position:fixed;inset:0;z-index:5;background:#F2F3FF;opacity:0;pointer-events:none;"></div>
 
-<!-- Focus indicator SVG -->
-<svg id="focusCursor" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="20" cy="20" r="8" stroke="#5B7BFF" stroke-width="1.5"/>
-  <line x1="20" y1="2" x2="20" y2="10" stroke="#5B7BFF" stroke-width="1.5"/>
-  <line x1="20" y1="30" x2="20" y2="38" stroke="#5B7BFF" stroke-width="1.5"/>
-  <line x1="2" y1="20" x2="10" y2="20" stroke="#5B7BFF" stroke-width="1.5"/>
-  <line x1="30" y1="20" x2="38" y2="20" stroke="#5B7BFF" stroke-width="1.5"/>
-</svg>
+<!-- Scroll hint -->
+<div id="scrollHint">
+  <span>DÉFILER POUR EXPLORER</span>
+  <svg width="14" height="20" viewBox="0 0 14 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="1" y="1" width="12" height="18" rx="6" stroke="#5B7BFF" stroke-width="1.2"/>
+    <circle cx="7" cy="6" r="1.8" fill="#5B7BFF"/>
+  </svg>
+</div>
 
-<div class="hint">CONFIGURATEUR [ESC]</div>
+<div class="hint" id="configHint">SCÈNE 1 — CONFIGURATEUR [ESC]</div>
 <div id="loading" class="loading"><div style="color:var(--accent); letter-spacing: 0.3em; font-size: 10px;">CHARGEMENT...</div></div>
 
+<!-- ===== PANNEAU SCÈNE 1 ===== -->
 <div class="panel" id="uiPanel">
-  <div style="font-weight: 600; color: var(--accent); letter-spacing: 0.2em; margin-bottom: 20px; font-size: 12px;">PARAMÈTRES</div>
+  <div style="font-weight: 600; color: var(--accent); letter-spacing: 0.2em; margin-bottom: 4px; font-size: 12px;">PARAMÈTRES — SCÈNE 1</div>
+  <div style="font-size: 9px; color: #7a82a8; margin-bottom: 18px; letter-spacing: 0.1em;">terrain.glb + maisons.glb</div>
 
   <div class="group-title">ÉCLAIRAGE</div>
   <div class="control">
@@ -211,6 +222,10 @@
     <label>Fréquence <span class="value" id="waveSizeVal">0.8</span></label>
     <input type="range" id="waveSize" min="0.5" max="10.0" step="0.1" value="0.8">
   </div>
+  <div class="control">
+    <label>Grossissement <span class="value" id="waveSizeBoostVal">1.5</span>×</label>
+    <input type="range" id="waveSizeBoost" min="0" max="5" step="0.1" value="1.5">
+  </div>
   <div class="color-control">
     <label>Couleur onde</label>
     <div class="color-wrapper"><input type="color" id="waveColor" value="#85ffe7"></div>
@@ -246,12 +261,6 @@
   </div>
   <p class="save-note" id="camCopyNote" style="display:none;color:var(--accent)">Position copiée ✓</p>
 
-  <div class="group-title">HOTSPOT</div>
-  <div class="btn-row" style="margin-bottom:8px">
-    <div class="btn" id="setHotspotBtn">PLACER LE HOTSPOT</div>
-  </div>
-  <p class="save-note" id="hotspotHint" style="display:none">Cliquez sur la carte pour placer le hotspot</p>
-
   <div class="group-title">MAISONS</div>
   <div class="control">
     <label>Opacité <span class="value" id="houseAlphaVal">1.0</span></label>
@@ -259,11 +268,158 @@
   </div>
   <div class="color-control">
     <label>Couleur</label>
-    <div class="color-wrapper"><input type="color" id="houseColor" value="#85a3ff"></div>
+    <div class="color-wrapper"><input type="color" id="houseColor" value="#b3c6ff"></div>
   </div>
 
   <button class="btn-save" id="saveBtn">SAUVEGARDER CONFIG</button>
   <p class="save-note">Config encodée dans l'URL — copiez l'adresse pour la partager ou la conserver.</p>
+</div>
+
+<!-- ===== PANNEAU SCÈNE 2 ===== -->
+<div class="panel" id="uiPanel2">
+  <div style="font-weight: 600; color: var(--accent); letter-spacing: 0.2em; margin-bottom: 4px; font-size: 12px;">PARAMÈTRES — SCÈNE 2</div>
+  <div style="font-size: 9px; color: #7a82a8; margin-bottom: 18px; letter-spacing: 0.1em;">terrain2.glb + maisons2.glb</div>
+
+  <div class="group-title">ÉCLAIRAGE</div>
+  <div class="control">
+    <label>Lumière ambiante <span class="value" id="s2ambientVal">1.45</span></label>
+    <input type="range" id="s2ambient" min="0" max="3" step="0.05" value="1.45">
+  </div>
+  <div class="control">
+    <label>Soleil <span class="value" id="s2sunVal">3.45</span></label>
+    <input type="range" id="s2sun" min="0" max="5" step="0.05" value="3.45">
+  </div>
+  <div class="control">
+    <label>Azimut <span class="value" id="s2sunAzVal">322</span>°</label>
+    <input type="range" id="s2sunAz" min="0" max="360" step="1" value="322">
+  </div>
+  <div class="control">
+    <label>Élévation <span class="value" id="s2sunElVal">68</span>°</label>
+    <input type="range" id="s2sunEl" min="0" max="90" step="1" value="68">
+  </div>
+
+  <div class="group-title">POINTS</div>
+  <div class="control">
+    <label>Densité <span class="value" id="s2densityVal">249</span></label>
+    <input type="range" id="s2density" min="50" max="600" step="1" value="249">
+  </div>
+  <div class="control">
+    <label>Taille <span class="value" id="s2pointSizeVal">0.055</span></label>
+    <input type="range" id="s2pointSize" min="0.005" max="0.1" step="0.001" value="0.055">
+  </div>
+  <div class="color-control">
+    <label>Couleur base</label>
+    <div class="color-wrapper"><input type="color" id="s2pointColor" value="#0033FF"></div>
+  </div>
+
+
+  <div class="group-title">SCAN BÂTIMENT</div>
+  <div class="color-control">
+    <label>Couleur</label>
+    <div class="color-wrapper"><input type="color" id="s2scan1Color" value="#00ffee"></div>
+  </div>
+  <div class="control">
+    <label>Taille sphères <span class="value" id="s2scan1SizeVal">23</span></label>
+    <input type="range" id="s2scan1Size" min="5" max="150" step="1" value="23">
+  </div>
+  <div class="control">
+    <label>Densité <span class="value" id="s2scan1DensityVal">50</span></label>
+    <input type="range" id="s2scan1Density" min="8" max="50" step="1" value="50">
+  </div>
+  <div class="control">
+    <label>Fond ambiant <span class="value" id="s2scan1AlphaVal">0.00</span></label>
+    <input type="range" id="s2scan1Alpha" min="0" max="0.5" step="0.01" value="0.00">
+  </div>
+  <div class="control">
+    <label>Vitesse <span class="value" id="s2scan1SpeedVal">3.0</span> s</label>
+    <input type="range" id="s2scan1Speed" min="0.5" max="10" step="0.1" value="3.0">
+  </div>
+
+  <div class="group-title">ONDE DE SOL</div>
+  <div class="color-control">
+    <label>Couleur</label>
+    <div class="color-wrapper"><input type="color" id="s2sweepColor" value="#12EBC7"></div>
+  </div>
+  <div class="control">
+    <label>Largeur <span class="value" id="s2sweepWidthVal">1.80</span></label>
+    <input type="range" id="s2sweepWidth" min="0.1" max="6" step="0.05" value="1.80">
+  </div>
+  <div class="control">
+    <label>Amplitude <span class="value" id="s2sweepRangeVal">8.00</span></label>
+    <input type="range" id="s2sweepRange" min="2" max="20" step="0.1" value="8.00">
+  </div>
+  <div class="control">
+    <label>Cycle (s) <span class="value" id="s2sweepCycleVal">7.00</span></label>
+    <input type="range" id="s2sweepCycle" min="1" max="20" step="0.1" value="7.00">
+  </div>
+  <div class="control">
+    <label>Intensité <span class="value" id="s2sweepStrengthVal">1.00</span></label>
+    <input type="range" id="s2sweepStrength" min="0" max="1" step="0.01" value="1.00">
+  </div>
+
+  <div class="group-title">OMBRES BAKÉES</div>
+  <div class="control">
+    <label>Opacité <span class="value" id="s2shadowOpacityVal">0.60</span></label>
+    <input type="range" id="s2shadowOpacity" min="0" max="1" step="0.01" value="0.60">
+  </div>
+  <div class="control">
+    <label>Rotation <span class="value" id="s2shadowRotVal">90</span>°</label>
+    <input type="range" id="s2shadowRot" min="-180" max="180" step="0.5" value="90">
+  </div>
+  <div class="control">
+    <label>Mode de fusion</label>
+    <select id="s2shadowBlend" style="width:100%;background:#1a1f3a;color:#e0e6ff;border:1px solid #2a3050;padding:4px 6px;font-size:11px;font-family:inherit;">
+      <option value="multiply">Multiply</option>
+      <option value="normal" selected>Normal</option>
+      <option value="additive">Additive</option>
+      <option value="subtractive">Subtractive</option>
+    </select>
+  </div>
+  <div class="control">
+    <label>Échelle <span class="value" id="s2shadowScaleVal">1.00</span></label>
+    <input type="range" id="s2shadowScale" min="0.2" max="3" step="0.01" value="1.00">
+  </div>
+  <div class="control">
+    <label>Décalage X <span class="value" id="s2shadowOffXVal">0.00</span></label>
+    <input type="range" id="s2shadowOffX" min="-50" max="50" step="0.1" value="0">
+  </div>
+  <div class="control">
+    <label>Décalage Z <span class="value" id="s2shadowOffZVal">0.00</span></label>
+    <input type="range" id="s2shadowOffZ" min="-50" max="50" step="0.1" value="0">
+  </div>
+
+  <div class="group-title">CAMÉRA ORTHOGRAPHIQUE</div>
+  <div class="control">
+    <label>Zoom <span class="value" id="s2orthoZoomVal">1.70</span></label>
+    <input type="range" id="s2orthoZoom" min="0.2" max="20" step="0.05" value="1.7">
+  </div>
+  <div class="control">
+    <label>Azimut <span class="value" id="s2orthoAzVal">45.0</span>°</label>
+    <input type="range" id="s2orthoAz" min="0" max="360" step="0.5" value="45">
+  </div>
+  <div class="control">
+    <label>Élévation <span class="value" id="s2orthoElVal">30.0</span>°</label>
+    <input type="range" id="s2orthoEl" min="5" max="89" step="0.5" value="30">
+  </div>
+  <div class="control">
+    <label>Cible X <span class="value" id="s2camTxVal">-0.010</span></label>
+    <input type="range" id="s2camTx" min="-5" max="5" step="0.01" value="-0.01">
+  </div>
+  <div class="control">
+    <label>Cible Y <span class="value" id="s2camTyVal">0.000</span></label>
+    <input type="range" id="s2camTy" min="-5" max="5" step="0.01" value="0">
+  </div>
+  <div class="control">
+    <label>Cible Z <span class="value" id="s2camTzVal">0.000</span></label>
+    <input type="range" id="s2camTz" min="-5" max="5" step="0.01" value="0">
+  </div>
+  <div class="btn-row" style="margin-bottom:8px">
+    <div class="btn" id="s2copyCamBtn">COPIER POSITION</div>
+  </div>
+  <p class="save-note" id="s2camCopyNote" style="display:none;color:var(--accent)">Position copiée ✓</p>
+
+  <button class="btn-save" id="s2saveBtn">SAUVEGARDER CONFIG S2</button>
+  <p class="save-note">Config scène 2 sauvegardée dans localStorage.</p>
 </div>
 
 <script type="importmap">
@@ -280,6 +436,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { MeshSurfaceSampler } from 'three/addons/math/MeshSurfaceSampler.js';
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
@@ -340,7 +497,8 @@ const waveUniforms = {
   uScreenHeight: { value: window.innerHeight },
   uRevealRadius: { value: -1.0 },   // wave front radius (-1 = nothing visible)
   uRevealOrigin: { value: new THREE.Vector2(0, 0) },  // XZ wave source
-  uTerrainReveal: { value: 0.0 }    // synced with topoUniforms.uReveal for Y scaling
+  uTerrainReveal: { value: 0.0 },    // synced with topoUniforms.uReveal for Y scaling
+  uWaveSizeBoost: { value: 1.5 }     // grossissement des points au passage de l'onde (0 = aucun)
 };
 
 const topoMaterial = new THREE.ShaderMaterial({
@@ -412,9 +570,9 @@ const INTRO_DURATION = 5.2; // secondes (alignée sur la fin de la séquence d'a
 const I_OVERLAY_OUT   = [0.0,  0.8];  // loading overlay fades out
 const I_TERRAIN       = [0.5,  2.5];  // terrain + points montent
 const I_TOPO_DRAW     = [1.8,  3.8];  // traits se dessinent cam → fond
-const I_BUILDINGS     = [2.4,  4.2];  // maisons fade in (légèrement décalé après les traits topo)
-const I_ANNOT         = [3.5,  4.8];  // labels d'altitude
-const I_HOTSPOT       = [4.0,  5.2];  // hotspot
+const I_BUILDINGS     = [2.4,  4.2];  // maisons fade in
+const I_ANNOT         = [0.0,  2.5];  // labels d'altitude — dès le début
+const I_HOTSPOT       = [5.5,  6.5];  // hotspot
 
 function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
 function easeInOut(t) { return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; }
@@ -445,7 +603,7 @@ function updateIntro(elapsed) {
 
   // --- Onde radiale sur les points (démarre légèrement après le terrain, depuis le hotspot) ---
   const pointsT = easeInOut(phase(elapsed, I_TERRAIN[0] + 0.3, I_TERRAIN[1] + 0.4));
-  waveUniforms.uRevealRadius.value = pointsT * 3.5 - 0.2;
+  waveUniforms.uRevealRadius.value = pointsT * 12.0 - 0.2;
 
   // --- Lignes topo se dessinent de la caméra vers le fond ---
   const topoT = easeInOut(phase(elapsed, ...I_TOPO_DRAW));
@@ -458,8 +616,8 @@ function updateIntro(elapsed) {
     if (c.isMesh && c.material) c.material.opacity = buildT * houseAlpha;
   });
 
-  // --- Annotations + hotspot ---
-  annotReveal   = easeInOut(phase(elapsed, ...I_ANNOT));
+  // --- Annotations + hotspot --- (linéaire pour annot pour laisser le stagger respirer)
+  annotReveal   = phase(elapsed, ...I_ANNOT);
   hotspotReveal = easeInOut(phase(elapsed, ...I_HOTSPOT));
 
   // Done — snap to final state
@@ -469,11 +627,13 @@ function updateIntro(elapsed) {
     topoUniforms.uReveal.value = 1;
     topoUniforms.uTopoRevealDist.value = 15.0;
     waveUniforms.uTerrainReveal.value = 1;
-    waveUniforms.uRevealRadius.value = 3.5;
+    waveUniforms.uRevealRadius.value = 12.0;
     annotReveal = 1;
     hotspotReveal = 1;
+    // Pas de reset de parallaxGroup.rotation — le parallax souris continue sans saut
     const houseAlphaFinal = parseFloat(document.getElementById('houseAlpha').value);
     housesGroup.traverse(c => { if (c.isMesh && c.material) c.material.opacity = houseAlphaFinal; });
+    showScrollHint();
   }
 }
 
@@ -487,6 +647,7 @@ function startIntro() {
   waveUniforms.uRevealRadius.value = -1.0;
   annotReveal = 0;
   hotspotReveal = 0;
+  altitudePoints.forEach(pt => { pt.alpha = 0; pt.lineProgress = 0; });
   // Positionner la caméra en hauteur (mouvement caméra conservé)
   camera.position.set(CAM_FINAL.x, CAM_START_Y, CAM_FINAL.z);
   housesGroup.traverse(c => { if (c.isMesh && c.material) c.material.opacity = 0; });
@@ -496,24 +657,713 @@ function startIntro() {
   loadingEl.style.opacity = '1';
 }
 
-/* ====================== HOTSPOT ====================== */
-let hotspotLocalPos = new THREE.Vector3(0.4726725366978833, 0.4503095624359107, 1.0048503007874532);   // vec3 in parallaxGroup space
+/* ====================== SCROLL & TRANSITION ====================== */
+// scrollT continu, non borné :
+//   0   → 1   : zoom scène 1
+//   1   → 1.5 : fade vers blanc (scène 1 disparaît)
+//   1.5 → 2.5 : blanc disparaît + scène 2 apparaît + caméra descend (el 80°→30°)
+//   ≥ 2.5     : scène 2 stable
+let scrollT = 0;
+let scrollTSmooth = 0;
+const SCROLL_SPEED = 0.003;
+
+const S2_EL_START = 38;  // élévation de départ — encore plus bas, arrivée plus latérale
+const S2_AZ_OFFSET = 12; // décalage d'azimut au départ → virage très léger
+const S2_ZOOM_START_MUL = 1.6; // multiplicateur de zoom au départ (dézoomé) → zoom à la fin
+
+let scrollCamEnd = new THREE.Vector3();
+let scrollTgtEnd = new THREE.Vector3();
+let scrollInitialized = false;
+
+function initScrollTargets() {
+  const dir = hotspotWorldPos.clone().sub(CAM_FINAL).normalize();
+  scrollCamEnd.copy(CAM_FINAL).addScaledVector(dir, 1.8);
+  scrollCamEnd.y += 0.6;
+  scrollTgtEnd.copy(hotspotWorldPos);
+  scrollInitialized = true;
+}
+
+// Scroll hint
+const scrollHintEl = document.getElementById('scrollHint');
+let scrollHintVisible = false;
+function showScrollHint() { if (scrollHintVisible) return; scrollHintVisible = true; scrollHintEl.classList.add('visible'); }
+function hideScrollHint() { scrollHintEl.classList.remove('visible'); scrollHintVisible = false; }
+
+// Canvas scène 2 — rendu séparé
+const canvas2El = document.getElementById('canvas2');
+const renderer2 = new THREE.WebGLRenderer({ canvas: canvas2El, antialias: true });
+renderer2.setSize(window.innerWidth, window.innerHeight);
+renderer2.setPixelRatio(window.devicePixelRatio);
+renderer2.outputColorSpace = THREE.SRGBColorSpace;
+renderer2.toneMapping = THREE.ACESFilmicToneMapping;
+renderer2.toneMappingExposure = 1.0;
+
+const whiteOverlay = document.getElementById('whiteOverlay');
+
+// Vars de transition
+let scene2Loaded = false;
+let scene2Loading = false;
+
+window.addEventListener('wheel', e => {
+  // Laisser passer le scroll sur les panneaux de contrôle
+  if (e.target.closest && e.target.closest('.panel')) return;
+  e.preventDefault();
+  if (introPlaying) {
+    // Pendant l'intro : ignorer le scroll, le remettre à zéro en permanence
+    scrollT = 0; scrollTSmooth = 0;
+    return;
+  }
+  const SCROLL_MAX = 4.0; // plafond : scène 2 stabilisée
+  scrollT = Math.max(0, Math.min(SCROLL_MAX, scrollT + e.deltaY * SCROLL_SPEED));
+}, { passive: false });
+
+let touchStartY = 0;
+window.addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; }, { passive: true });
+window.addEventListener('touchmove', e => {
+  const dy = touchStartY - e.touches[0].clientY;
+  touchStartY = e.touches[0].clientY;
+  if (introPlaying) { scrollT = 0; scrollTSmooth = 0; return; }
+  const SCROLL_MAX = 4.0;
+  scrollT = Math.max(0, Math.min(SCROLL_MAX, scrollT + dy * SCROLL_SPEED * 2));
+}, { passive: true });
+
+// Easing doux pour la descente caméra
+function easeInOutQuart(t) { return t < 0.5 ? 8*t*t*t*t : 1 - Math.pow(-2*t+2,4)/2; }
+
+// Appliquer la caméra ortho avec une élévation, un offset d'azimut et un multiplicateur de zoom
+function applyOrthoWithEl(elDeg, azOffsetDeg = 0, zoomMul = 1) {
+  const zoom = parseFloat(document.getElementById('s2orthoZoom').value) * zoomMul;
+  const az   = (parseFloat(document.getElementById('s2orthoAz').value) + azOffsetDeg) * Math.PI / 180;
+  const el   = elDeg * Math.PI / 180;
+  const tx   = parseFloat(document.getElementById('s2camTx').value);
+  const ty   = parseFloat(document.getElementById('s2camTy').value);
+  const tz   = parseFloat(document.getElementById('s2camTz').value);
+  const tgt  = new THREE.Vector3(tx, ty, tz);
+  camera2.position.set(
+    tgt.x + Math.cos(el) * Math.sin(az) * ORTHO_DIST,
+    tgt.y + Math.sin(el) * ORTHO_DIST,
+    tgt.z + Math.cos(el) * Math.cos(az) * ORTHO_DIST
+  );
+  camera2.lookAt(tgt);
+  controls2.target.copy(tgt);
+  const aspect = window.innerWidth / window.innerHeight;
+  camera2.left=-zoom*aspect; camera2.right=zoom*aspect;
+  camera2.top=zoom; camera2.bottom=-zoom;
+  camera2.updateProjectionMatrix();
+}
+
+function updateScrollAndTransition() {
+  if (!scrollInitialized || introPlaying) return;
+
+  scrollTSmooth += (scrollT - scrollTSmooth) * 0.07;
+  const s = scrollTSmooth;
+
+  // ── Phase 1 : zoom scène 1 — continue au-delà de s=1 pendant le fade ─────
+  // s1 va de 0 à 1 sur la plage 0→1, puis continue jusqu'à 1.8 sur 1→1.5
+  // (zoom continu et plus prononcé pendant la disparition)
+  const s1 = Math.min(s, 1) + Math.max(0, Math.min((s - 1) / 0.5, 1)) * 0.8;
+  camera.position.lerpVectors(CAM_FINAL, scrollCamEnd, s1);
+  controls.target.lerpVectors(
+    new THREE.Vector3(-0.2920, 0.2850, 0.2350), scrollTgtEnd, s1
+  );
+  // Pas de virage sur la scène 1 — on garde un mouvement pur de zoom
+  scrollRotOffset = 0;
+
+  // ── Apparition fluide des annotations au scroll : fade in 0→0.15, fade out 0.7→1 ──
+  // (l'intro initiale les a déjà révélées à 1; ici on les fait disparaître progressivement)
+  const altFadeOut = 1 - Math.max(0, Math.min((s - 0.4) / 0.5, 1));
+  annotReveal = altFadeOut;
+  hotspotReveal = altFadeOut;
+
+  // ── Phase 2 : fade vers blanc — démarre plus tôt et plus rapide ─────────
+  // La scène 1 commence à disparaître dès s=0.7 et est totalement blanche à s=1.1
+  const fadeOut = Math.max(0, Math.min((s - 0.7) / 0.4, 1));
+
+  if (fadeOut > 0 && !scene2Loaded && !scene2Loading) loadScene2();
+
+  // ── Phase 3 : apparition scène 2 + descente caméra (s 1.1→3.5) ───────────
+  const fadeIn = Math.max(0, Math.min((s - 1.1) / 2.4, 1));
+
+  // Blanc : monte 0→1 entre s=0.7 et s=1.1, redescend 1→0 entre s=1.1 et s=1.5
+  const whiteFadeIn  = s < 0.7 ? 0 : Math.max(0, Math.min((s - 0.7) / 0.4, 1));
+  const whiteFadeOut = s < 1.1 ? 1 : Math.max(0, 1 - (s - 1.1) / 0.4);
+  const whitePeak = s < 0.7 ? 0 : (s < 1.1 ? whiteFadeIn : whiteFadeOut);
+  whiteOverlay.style.opacity = whitePeak;
+
+  // Canvas 1 : disparaît lors du fadeOut
+  document.getElementById('canvas').style.opacity = 1 - fadeOut;
+
+  // Canvas 2 : apparaît lors du fadeIn
+  canvas2El.style.opacity = scene2Loaded ? fadeIn : 0;
+  canvas2El.style.pointerEvents = 'none';
+
+  // ── Caméra scène 2 : descend + virage azimut + zoom progressif (easing fluide) ──
+  if (scene2Loaded) {
+    const elTarget  = parseFloat(document.getElementById('s2orthoEl').value);
+    // Easing in-out cubic pour un mouvement plus organique
+    const eFade = easeInOutQuart(fadeIn);
+    const elCurrent  = S2_EL_START + (elTarget - S2_EL_START) * eFade;
+    // Virage : azimut décalé au départ, revient à 0 → arc latéral pendant l'arrivée
+    const azOffset   = S2_AZ_OFFSET * (1 - eFade);
+    // Zoom : commence dézoomé (S2_ZOOM_START_MUL) → cible 1.0
+    const zoomMul    = S2_ZOOM_START_MUL + (1 - S2_ZOOM_START_MUL) * eFade;
+    applyOrthoWithEl(elCurrent, azOffset, zoomMul);
+  }
+
+  // ── Indicateur panneau ────────────────────────────────────────────────────
+  const nowScene2 = fadeIn >= 0.5 && scene2Loaded;
+  if (nowScene2 !== scene2Active) {
+    scene2Active = nowScene2;
+    document.getElementById('configHint').textContent =
+      scene2Active ? 'SCÈNE 2 — CONFIGURATEUR [ESC]' : 'SCÈNE 1 — CONFIGURATEUR [ESC]';
+  }
+
+  if (s > 0.02) hideScrollHint();
+}
+
+let scene2Active = false;
+
+function switchToScene1() {}  // retour géré par scroll up
+function switchToScene2() {}  // géré par updateScrollAndTransition
+function activateScene2() {
+  // Snap état final — la caméra sera pilotée par le scroll dans updateScrollAndTransition
+  topoUniforms2.uReveal.value = 1;
+  topoUniforms2.uTopoRevealDist.value = 15.0;
+  waveUniforms2.uTerrainReveal.value = 1;
+  scene2AnnotReveal = 1;
+  parallaxGroup2.rotation.set(0, 0, 0);
+}
+let scene2AnnotReveal = 1;
+
+// Scène 2 Three.js objects
+const scene2 = new THREE.Scene();
+const bgColor2 = new THREE.Color(0xF2F3FF);
+scene2.background = bgColor2;
+scene2.fog = new THREE.Fog(bgColor2, 20.0, 31.0);
+
+// ===== CAMÉRA ORTHOGRAPHIQUE SCÈNE 2 =====
+const ORTHO_DIST = 20; // distance fixe de la caméra à la cible (hors champ)
+function orthoFrustum(zoom) {
+  const aspect = window.innerWidth / window.innerHeight;
+  const h = zoom;
+  const w = h * aspect;
+  return { l: -w, r: w, t: h, b: -h };
+}
+const _of = orthoFrustum(3.0);
+const camera2 = new THREE.OrthographicCamera(_of.l, _of.r, _of.t, _of.b, 0.01, 1000);
+
+// Positionner caméra isométrique par défaut (az=45°, el=35°)
+function updateOrthoCamera() {
+  const zoom = parseFloat(document.getElementById('s2orthoZoom').value);
+  const az   = parseFloat(document.getElementById('s2orthoAz').value)  * Math.PI / 180;
+  const el   = parseFloat(document.getElementById('s2orthoEl').value)  * Math.PI / 180;
+  const tx   = parseFloat(document.getElementById('s2camTx').value);
+  const ty   = parseFloat(document.getElementById('s2camTy').value);
+  const tz   = parseFloat(document.getElementById('s2camTz').value);
+  const target2 = new THREE.Vector3(tx, ty, tz);
+
+  // Direction depuis angles sphériques
+  const dx = Math.cos(el) * Math.sin(az);
+  const dy = Math.sin(el);
+  const dz = Math.cos(el) * Math.cos(az);
+  camera2.position.set(
+    target2.x + dx * ORTHO_DIST,
+    target2.y + dy * ORTHO_DIST,
+    target2.z + dz * ORTHO_DIST
+  );
+  camera2.lookAt(target2);
+  controls2.target.copy(target2);
+
+  // Mettre à jour le frustum selon zoom
+  const aspect = window.innerWidth / window.innerHeight;
+  camera2.left   = -zoom * aspect;
+  camera2.right  =  zoom * aspect;
+  camera2.top    =  zoom;
+  camera2.bottom = -zoom;
+  camera2.updateProjectionMatrix();
+}
+
+const controls2 = new OrbitControls(camera2, renderer.domElement);
+controls2.enableRotate = false; controls2.enableZoom = false; controls2.enablePan = false;
+controls2.enableDamping = false;
+
+updateOrthoCamera(); // appel initial — controls2 est maintenant défini
+
+const ambientLight2 = new THREE.AmbientLight(0xffffff, 1.45);
+scene2.add(ambientLight2);
+const sun2 = new THREE.DirectionalLight(0xffffff, 3.45);
+sun2.position.set(5, 10, 5);
+scene2.add(sun2);
+
+// Sync sun2 position with default azimuth/elevation (322°, 68°)
+{
+  const az = 322 * Math.PI / 180, el = 68 * Math.PI / 180;
+  sun2.position.set(
+    Math.cos(el) * Math.sin(az) * 10,
+    Math.sin(el) * 10,
+    Math.cos(el) * Math.cos(az) * 10
+  );
+}
+
+// Scène 2 uniforms points (sans onde)
+const waveUniforms2 = {
+  uTime: { value: 0 },
+  uBaseColor: { value: new THREE.Color(0x0033ff) },
+  uWaveColor: { value: new THREE.Color(0x85ffe7) },
+  uWaveSpeed: { value: 0.5 },
+  uWaveSize: { value: 0.8 },
+  uPointSize: { value: 0.055 },
+  uWaveOrigin0: { value: new THREE.Vector2(0, 0) },
+  uWaveOrigin1: { value: new THREE.Vector2(0, 0) },
+  uWaveOrigin2: { value: new THREE.Vector2(0, 0) },
+  uWavePhase0:  { value: 0.0 },
+  uWavePhase1:  { value: 2.1 },
+  uWavePhase2:  { value: 4.3 },
+  uWaveWeight0: { value: 0.0 },  // pas d'onde scène 2
+  uWaveWeight1: { value: 0.0 },
+  uWaveWeight2: { value: 0.0 },
+  uScreenHeight: { value: window.innerHeight },
+  uRevealRadius: { value: -1.0 },
+  uRevealOrigin: { value: new THREE.Vector2(0, 0) },
+  uTerrainReveal: { value: 0.0 },
+  uWaveSizeBoost: { value: 0.0 },   // pas de boost d'onde
+  uSweepColor: { value: new THREE.Color(0x12EBC7) },
+  uSweepPos: { value: 0.0 },     // position courante du front (en unités projetées)
+  uSweepWidth: { value: 1.8 },   // largeur de la bande de l'onde
+  uSweepStrength: { value: 1.0 } // intensité globale (toujours active)
+};
+
+const topoUniforms2 = {
+  uColor: { value: new THREE.Color(0x6289FF) },
+  uSpacing: { value: 94.0 },
+  uLineWidth: { value: 0.1 },
+  uReveal: { value: 0.0 },
+  uTopoRevealDist: { value: 0.0 }
+};
+
+const topoMaterial2 = new THREE.ShaderMaterial({
+  uniforms: { ...topoUniforms2, ...THREE.UniformsLib['fog'] },
+  vertexShader: `
+    #include <fog_pars_vertex>
+    uniform float uReveal;
+    varying float vY;
+    varying float vViewDist;
+    void main() {
+      vec3 pos = position;
+      pos.y *= uReveal;
+      vY = pos.y;
+      vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+      vViewDist = length(mvPosition.xyz);
+      gl_Position = projectionMatrix * mvPosition;
+      #include <fog_vertex>
+    }
+  `,
+  fragmentShader: `
+    #include <fog_pars_fragment>
+    uniform vec3 uColor;
+    uniform float uSpacing;
+    uniform float uLineWidth;
+    uniform float uTopoRevealDist;
+    varying float vY;
+    varying float vViewDist;
+    void main() {
+      float drawEdge = smoothstep(uTopoRevealDist, uTopoRevealDist - 0.6, vViewDist);
+      if (drawEdge < 0.01) discard;
+      float coord = vY * uSpacing;
+      float fraction = fract(coord);
+      float dist = abs(fraction - 0.5);
+      float delta = fwidth(coord);
+      float line = smoothstep(delta * (uLineWidth + 0.5), delta * (uLineWidth - 0.5), dist);
+      if (line < 0.1) discard;
+      gl_FragColor = vec4(uColor, line * drawEdge);
+      #include <fog_fragment>
+    }
+  `,
+  transparent: true, side: THREE.DoubleSide, extensions: { derivatives: true }
+});
+
+const parallaxGroup2 = new THREE.Group();
+scene2.add(parallaxGroup2);
+const housesGroup2 = new THREE.Group();
+parallaxGroup2.add(housesGroup2);
+
+let terrainCollisionMesh2 = null;
+let pointsObject2 = null;
+let altitudePoints2 = [];
+let altMeshLocalPositions2 = [];
+
+const CAM2_FINAL = new THREE.Vector3(1.6610, 1.7990, 3.0290);
+
+function regenerateGrid2() {
+  if (!terrainCollisionMesh2) return;
+  if (pointsObject2) parallaxGroup2.remove(pointsObject2);
+
+  const density = parseInt(document.getElementById('s2density').value);
+  const bbox = new THREE.Box3().setFromObject(terrainCollisionMesh2);
+  const size = bbox.getSize(new THREE.Vector3());
+  const nx = density, nz = Math.round(density * (size.z / size.x));
+  const stepX = size.x / nx, stepZ = size.z / nz;
+  const positions = [];
+  const raycaster = new THREE.Raycaster();
+  const down = new THREE.Vector3(0, -1, 0);
+
+  for (let i = 0; i <= nx; i++) {
+    for (let j = 0; j <= nz; j++) {
+      const x = bbox.min.x + i * stepX;
+      const z = bbox.min.z + j * stepZ;
+      raycaster.set(new THREE.Vector3(x, bbox.max.y + 1, z), down);
+      const hits = raycaster.intersectObject(terrainCollisionMesh2, true);
+      if (hits.length > 0) positions.push(hits[0].point.x, hits[0].point.y, hits[0].point.z);
+    }
+  }
+
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+
+  // Shader sans onde — points + sweep diagonal (bas-gauche → haut-droite)
+  pointsObject2 = new THREE.Points(geom, new THREE.ShaderMaterial({
+    uniforms: { ...waveUniforms2, ...THREE.UniformsLib['fog'], uTexture: { value: createTex() } },
+    vertexShader: `
+      #include <fog_pars_vertex>
+      uniform float uPointSize;
+      uniform float uScreenHeight;
+      uniform float uTerrainReveal;
+      uniform float uSweepPos;
+      uniform float uSweepWidth;
+      uniform float uSweepStrength;
+      varying float vSweep;
+      void main() {
+        vec3 pos = position;
+        pos.y *= uTerrainReveal;
+
+        // Projection diagonale bas-gauche → haut-droite : direction (1, -1) normalisée
+        float proj = (pos.x - pos.z) * 0.7071;
+        float d = abs(proj - uSweepPos);
+        float sweep = (1.0 - smoothstep(0.0, uSweepWidth, d)) * uSweepStrength;
+        vSweep = sweep;
+
+        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+        // Léger boost de taille sur la bande (comme scène 1)
+        gl_PointSize = uPointSize * (1.0 + sweep * 0.8) * (uScreenHeight / -mvPosition.z);
+        gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }
+    `,
+    fragmentShader: `
+      #include <fog_pars_fragment>
+      uniform vec3 uBaseColor;
+      uniform vec3 uSweepColor;
+      uniform sampler2D uTexture;
+      varying float vSweep;
+      void main() {
+        vec4 tex = texture2D(uTexture, gl_PointCoord);
+        if (tex.a < 0.1) discard;
+        vec3 col = mix(uBaseColor, uSweepColor, clamp(vSweep * 1.4, 0.0, 1.0));
+        gl_FragColor = vec4(col, tex.a);
+        #include <fog_fragment>
+      }
+    `,
+    transparent: true, depthWrite: false
+  }));
+  parallaxGroup2.add(pointsObject2);
+}
+
+function extractAltMeshes2(terrainScene) {
+  const found = [];
+  terrainScene.traverse(node => {
+    if (/^alt\d*$/i.test(node.name)) {
+      node.visible = false;
+      if (node.isMesh && node.material) { node.material = node.material.clone(); node.material.visible = false; }
+      const wp = new THREE.Vector3();
+      node.getWorldPosition(wp);
+      const lp = parallaxGroup2.worldToLocal(wp.clone());
+      found.push({ localPos: lp, name: node.name });
+    }
+  });
+  found.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  altMeshLocalPositions2 = found.map(f => f.localPos);
+}
+
+function pickAltitudePoints2() {
+  if (altMeshLocalPositions2.length === 0) return;
+  let minY = Infinity, maxY = -Infinity;
+  altMeshLocalPositions2.forEach(p => { if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y; });
+  if (terrainCollisionMesh2) {
+    const bbox = new THREE.Box3().setFromObject(terrainCollisionMesh2);
+    minY = Math.min(minY, bbox.min.y);
+    maxY = Math.max(maxY, bbox.max.y);
+  }
+  const yRange = maxY - minY || 1;
+  const lineHeights = [28, 38, 50, 34, 60, 42, 26, 55, 32, 46, 44, 30];
+
+  altitudePoints2 = altMeshLocalPositions2.map((localP, i) => {
+    const worldPos = localP.clone();
+    parallaxGroup2.localToWorld(worldPos);
+    const baseAlt = ((localP.y - minY) / yRange) * 650 + 180;
+    return {
+      localPos: localP, worldPos,
+      baseAlt,
+      phase: (i / altMeshLocalPositions2.length) * Math.PI * 2 + i * 0.37,
+      lineH: lineHeights[i % lineHeights.length],
+      side: i % 2 === 0 ? 1 : -1
+    };
+  });
+}
+
+function updateAltWorldPositions2() {
+  altitudePoints2.forEach(pt => {
+    const w = pt.localPos.clone();
+    parallaxGroup2.localToWorld(w);
+    pt.worldPos.copy(w);
+  });
+}
+
+
+async function loadScene2() {
+  if (scene2Loading || scene2Loaded) return;
+  scene2Loading = true;
+  const loader2 = new GLTFLoader();
+  const [tData2, mData2] = await Promise.all([
+    loader2.loadAsync('terrain2.glb'),
+    loader2.loadAsync('maisons2.glb')
+  ]);
+
+  const tCol2 = tData2.scene.clone();
+  tCol2.traverse(c => { if (c.isMesh) { c.geometry.computeBoundsTree(); c.visible = false; } });
+  parallaxGroup2.add(tCol2);
+  terrainCollisionMesh2 = tCol2;
+
+  extractAltMeshes2(tData2.scene);
+
+  const bbox2 = new THREE.Box3().setFromObject(tCol2);
+  const center2 = new THREE.Vector3();
+  bbox2.getCenter(center2);
+  waveUniforms2.uRevealOrigin.value.set(center2.x, center2.z);
+
+  // Terrain2 → caché entièrement, le quadrillage de points est généré par regenerateGrid2()
+  tData2.scene.traverse(c => {
+    if (c.isMesh) c.visible = false;
+  });
+  parallaxGroup2.add(tData2.scene);
+
+  // Maisons2 → matériaux originaux du GLB
+  mData2.scene.traverse(c => {
+    if (c.isMesh && c.material) {
+      c.material = Array.isArray(c.material)
+        ? c.material.map(m => { const n = m.clone(); n.fog = true; return n; })
+        : (c.material = c.material.clone(), c.material.fog = true, c.material);
+    }
+  });
+  housesGroup2.add(mData2.scene);
+
+  // ── Scan bâtiment scan1 ──
+  mData2.scene.traverse(node => {
+    if (!scan1Mesh && node.isMesh && node.name.toLowerCase().startsWith('scan1'))
+      scan1Mesh = node;
+  });
+  if (scan1Mesh) {
+    scan1Mesh.updateMatrixWorld(true);
+
+    // BBox world du mesh
+    const scanBboxWorld = new THREE.Box3().setFromObject(scan1Mesh);
+    const bMin = scanBboxWorld.min, bMax = scanBboxWorld.max;
+    const bSize = scanBboxWorld.getSize(new THREE.Vector3());
+
+    // Remplissage volumique — grille + jitter pour un nuage naturel
+    const positions = [], normals = [], randoms = [], isEdgePt = [];
+    const DENSITY = 50; // subdivisions par axe
+    for (let ix = 0; ix <= DENSITY; ix++) {
+      for (let iy = 0; iy <= DENSITY; iy++) {
+        for (let iz = 0; iz <= DENSITY; iz++) {
+          const jx = (Math.random() - 0.5) * (bSize.x / DENSITY) * 0.9;
+          const jy = (Math.random() - 0.5) * (bSize.y / DENSITY) * 0.9;
+          const jz = (Math.random() - 0.5) * (bSize.z / DENSITY) * 0.9;
+          const x = bMin.x + (ix / DENSITY) * bSize.x + jx;
+          const y = bMin.y + (iy / DENSITY) * bSize.y + jy;
+          const z = bMin.z + (iz / DENSITY) * bSize.z + jz;
+          positions.push(x, y, z);
+          normals.push(0, 1, 0);
+          randoms.push(Math.random());
+          isEdgePt.push(0.0);
+        }
+      }
+    }
+    // Convertir en espace local parallaxGroup2 pour suivre le parallax
+    const localPos = [], localNorm = [];
+    const invMat = new THREE.Matrix4().copy(parallaxGroup2.matrixWorld).invert();
+    const tmpV = new THREE.Vector3();
+    for (let i = 0; i < positions.length; i += 3) {
+      tmpV.set(positions[i], positions[i+1], positions[i+2]);
+      parallaxGroup2.worldToLocal(tmpV);
+      localPos.push(tmpV.x, tmpV.y, tmpV.z);
+      localNorm.push(0, 1, 0); // normale fictive
+    }
+    // BBox locale pour l'origine de l'onde
+    const scanBbox = new THREE.Box3();
+    scanBboxWorld.min.clone().applyMatrix4(invMat); // approx
+    const bMinL = new THREE.Vector3().copy(bMin); parallaxGroup2.worldToLocal(bMinL);
+    const bMaxL = new THREE.Vector3().copy(bMax); parallaxGroup2.worldToLocal(bMaxL);
+    scanBbox.expandByPoint(bMinL); scanBbox.expandByPoint(bMaxL);
+    const scanCenter = scanBbox.getCenter(new THREE.Vector3());
+
+    const scanGeom = new THREE.BufferGeometry();
+    scanGeom.setAttribute('position', new THREE.Float32BufferAttribute(localPos, 3));
+    scanGeom.setAttribute('normal',   new THREE.Float32BufferAttribute(localNorm, 3));
+    scanGeom.setAttribute('aRandom',  new THREE.Float32BufferAttribute(randoms, 1));
+
+    scan1Uniforms = {
+      uTime:         { value: 0 },
+      uScanY:        { value: 0.0 },   // position Y de la bande
+      uScanDir:      { value: 1.0 },   // +1 descente, -1 montée
+      uBandWidth:    { value: 0.08 },  // largeur crête
+      uTrailLen:     { value: 0.06 },  // longueur traîne
+      uPointSize:    { value: 23.0 },
+      uBaseAlpha:    { value: 0.0 },
+      uBaseColor:    { value: new THREE.Color('#00ffee') },
+      uScanColor:    { value: new THREE.Color('#00ffee') },
+      uScreenHeight: { value: window.innerHeight },
+      uYMin:         { value: scanBbox.min.y },
+      uYMax:         { value: scanBbox.max.y },
+    };
+
+    const scanMat = new THREE.ShaderMaterial({
+      uniforms: scan1Uniforms,
+      vertexShader: `
+        attribute float aRandom;
+        uniform float uTime, uScanY, uScanDir;
+        uniform float uBandWidth, uTrailLen;
+        uniform float uPointSize, uBaseAlpha;
+        uniform float uScreenHeight, uYMin, uYMax;
+        varying float vAlpha, vIntensity;
+        void main() {
+          vec3 p = position;
+
+          // Distance signée à la bande (positif = derrière la bande dans le sens du scan)
+          float signedD = (uScanY - p.y) * uScanDir;
+
+          // Crête lumineuse nette
+          float crest = exp(-signedD * signedD / (uBandWidth * uBandWidth * 0.5));
+
+          // Traîne exponentielle derrière la bande
+          float trail = 0.0;
+          if (signedD > 0.0) {
+            trail = exp(-signedD / max(0.001, uTrailLen)) * 0.6;
+          }
+
+          vIntensity = clamp(crest + trail, 0.0, 1.0);
+
+          // Fond ambiant + flottement lent
+          float flicker = 0.8 + 0.2 * sin(uTime * 1.5 + aRandom * 6.28);
+          vAlpha = clamp(uBaseAlpha * flicker + vIntensity, 0.0, 1.0);
+
+          vec4 mvPos = modelViewMatrix * vec4(p, 1.0);
+          gl_PointSize = uPointSize * (uScreenHeight / -mvPos.z) * 0.003;
+          gl_Position = projectionMatrix * mvPos;
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uBaseColor, uScanColor;
+        varying float vAlpha, vIntensity;
+        void main() {
+          if (vAlpha < 0.01) discard;
+          vec2 uv = gl_PointCoord - vec2(0.5);
+          float r = length(uv);
+          if (r > 0.5) discard;
+          // Dégradé sphérique
+          float light = pow(1.0 - r * 2.0, 1.5);
+          vec3 col = mix(uBaseColor, uScanColor, vIntensity * vIntensity) * (0.6 + light * 0.5);
+          float alpha = vAlpha * smoothstep(0.5, 0.3, r);
+          gl_FragColor = vec4(col, alpha);
+        }
+      `,
+      transparent: true, depthWrite: false
+    });
+    scan1Points = new THREE.Points(scanGeom, scanMat);
+    scan1Points.frustumCulled = false;
+    scan1Mat_ref = scanMat; // référence pour rebuild densité
+    parallaxGroup2.add(scan1Points);
+  }
+
+  // Plan d'ombres baké — plaqué juste au-dessus du terrain (pour éviter z-fighting)
+  // Mode multiply : assombrit naturellement le terrain en dessous tout en laissant les points visibles
+  const shadowTex = await new Promise((resolve, reject) => {
+    new THREE.TextureLoader().load('ombres.png', resolve, undefined, reject);
+  });
+  shadowTex.colorSpace = THREE.SRGBColorSpace;
+  shadowTex.anisotropy = 8;
+  const tBbox = new THREE.Box3().setFromObject(terrainCollisionMesh2);
+  const tSize = tBbox.getSize(new THREE.Vector3());
+  const tCenter = tBbox.getCenter(new THREE.Vector3());
+  const shadowMat = new THREE.MeshBasicMaterial({
+    map: shadowTex,
+    transparent: true,
+    opacity: parseFloat(document.getElementById('s2shadowOpacity')?.value || 0.6),
+    blending: THREE.NormalBlending,
+    depthWrite: false,
+    fog: true
+  });
+  const shadowGeom = new THREE.PlaneGeometry(tSize.x, tSize.z);
+  const shadowMesh = new THREE.Mesh(shadowGeom, shadowMat);
+  shadowMesh.rotation.x = -Math.PI / 2;
+  shadowMesh.rotation.z = Math.PI / 2; // 90° par défaut
+  shadowMesh.position.set(tCenter.x, tBbox.min.y + 0.005, tCenter.z); // juste au-dessus du sol
+  shadowMesh.userData.baseCenter = tCenter.clone();
+  shadowMesh.userData.baseY = tBbox.min.y + 0.005;
+  shadowMesh.renderOrder = 1; // après le terrain, avant les points
+  shadowMesh.name = 'shadowPlane2';
+  parallaxGroup2.add(shadowMesh);
+  scene2ShadowMesh = shadowMesh;
+  applyShadowTransform2();
+  applyShadowBlend2();
+
+  regenerateGrid2();
+  pickAltitudePoints2();
+  activateScene2(); // snap to final state
+  scene2Loaded = true;
+  scene2Loading = false;
+}
+
+let showAltitudes2 = false;
+let scene2ShadowMesh = null;
+let scan1Points = null, scan1Uniforms = null, scan1Mat_ref = null, scan1Mesh = null, scan1Speed = 3.0;
+
+function applyShadowTransform2() {
+  if (!scene2ShadowMesh) return;
+  const rot = parseFloat(document.getElementById('s2shadowRot').value) * Math.PI / 180;
+  const scale = parseFloat(document.getElementById('s2shadowScale').value);
+  const offX = parseFloat(document.getElementById('s2shadowOffX').value);
+  const offZ = parseFloat(document.getElementById('s2shadowOffZ').value);
+  scene2ShadowMesh.rotation.set(-Math.PI / 2, 0, rot);
+  scene2ShadowMesh.scale.set(scale, scale, 1);
+  const c = scene2ShadowMesh.userData.baseCenter;
+  scene2ShadowMesh.position.set(c.x + offX, scene2ShadowMesh.userData.baseY, c.z + offZ);
+}
+
+function applyShadowBlend2() {
+  if (!scene2ShadowMesh) return;
+  const mode = document.getElementById('s2shadowBlend').value;
+  const map = {
+    multiply: THREE.MultiplyBlending,
+    normal: THREE.NormalBlending,
+    additive: THREE.AdditiveBlending,
+    subtractive: THREE.SubtractiveBlending
+  };
+  scene2ShadowMesh.material.blending = map[mode] || THREE.MultiplyBlending;
+  scene2ShadowMesh.material.needsUpdate = true;
+}
+function drawAnnotations2(time) { /* désactivé scène 2 */ }
+function projectToScreen2(worldPos) {
+  const p = worldPos.clone(); p.project(camera2);
+  return { x: (p.x*0.5+0.5)*annotCanvas.width, y: (-p.y*0.5+0.5)*annotCanvas.height, behind: p.z>1 };
+}
+
+// Anciens vars hotspot conservés pour compatibilité
+let hotspotLocalPos = new THREE.Vector3(0.4726725366978833, 0.4503095624359107, 1.0048503007874532);
 let hotspotWorldPos = new THREE.Vector3();
 let hotspotScreenPos = { x: 0, y: 0, behind: true };
 let hotspotHovered = false;
 let settingHotspot = false;
-
-// Transition state
-let transitioning = false;
-let transitionT = 0;
-let transitionStartTime = 0;
-const TRANSITION_DURATION = 2200;
-const camStartPos  = new THREE.Vector3();
-const camEndPos    = new THREE.Vector3();
-const camStartTgt  = new THREE.Vector3();
-const camEndTgt    = new THREE.Vector3();
-let   rotStartY    = 0;
-const transOverlay = document.getElementById('transitionOverlay');
+let scrollRotOffset = 0; // virage progressif au scroll, s'additionne au parallax
 
 function detectHotspot(scene) {
   // Look for a mesh named "zone1" or "hotspot" in any loaded scene
@@ -546,108 +1396,10 @@ function updateHotspotWorldPos() {
 }
 
 function drawHotspot(time) {
-  if (!hotspotLocalPos || transitioning || hotspotReveal <= 0) return;
-  const { x, y, behind } = hotspotScreenPos;
-  if (behind) return;
-
-  annotCtx.save();
-  annotCtx.globalAlpha = hotspotReveal;
-
-  // Bounce: ring pulse only — dot stays fixed
-  const cx = x, cy = y;
-
-  // Pulse ring
-  const pulse = (Math.sin(time * 2.5) * 0.5 + 0.5);
-  const ringR = 20 + pulse * 14;
-  const ringAlpha = 0.7 - pulse * 0.5;
-
-  annotCtx.save();
-
-  // Outer pulsing ring
-  annotCtx.beginPath();
-  annotCtx.arc(cx, cy, ringR, 0, Math.PI * 2);
-  annotCtx.strokeStyle = `rgba(18,235,199,${ringAlpha})`;
-  annotCtx.lineWidth = 1.5;
-  annotCtx.stroke();
-
-  // Second static ring
-  annotCtx.beginPath();
-  annotCtx.arc(cx, cy, 17, 0, Math.PI * 2);
-  annotCtx.strokeStyle = hotspotHovered ? '#fff' : 'rgba(18,235,199,0.9)';
-  annotCtx.lineWidth = 1.5;
-  annotCtx.stroke();
-
-  // Inner dot
-  annotCtx.beginPath();
-  annotCtx.arc(cx, cy, 7, 0, Math.PI * 2);
-  annotCtx.fillStyle = hotspotHovered ? '#fff' : '#12EBC7';
-  annotCtx.fill();
-
-  // Label "EXPLORER" : bouton à fond blanc, texte #181C34
-  const labelText = 'EXPLORER';
-  const labelFontPx = 13;
-  annotCtx.font = `600 ${labelFontPx}px "IBM Plex Mono", monospace`;
-  annotCtx.textAlign = 'center';
-  annotCtx.textBaseline = 'middle';
-  const padX = 14;
-  const padY = 8;
-  const textW = annotCtx.measureText(labelText).width;
-  const btnW = textW + padX * 2;
-  const btnH = labelFontPx + padY * 2;
-  const btnCx = cx;
-  const btnCy = cy - ringR - 8 - btnH / 2;
-  // Fond blanc
-  annotCtx.fillStyle = '#FFFFFF';
-  annotCtx.fillRect(btnCx - btnW / 2, btnCy - btnH / 2, btnW, btnH);
-  // Texte
-  annotCtx.fillStyle = '#181C34';
-  annotCtx.fillText(labelText, btnCx, btnCy + 1);
-
-  annotCtx.restore();
+  // Hotspot supprimé — scroll-driven zoom à la place
 }
 
-function startSceneTransition() {
-  if (transitioning) return;
-  transitioning = true;
-  transitionStartTime = performance.now();
-
-  camStartPos.copy(camera.position);
-  camStartTgt.copy(controls.target);
-  rotStartY = parallaxGroup.rotation.y;
-
-  // Zoom toward the hotspot — move camera closer + slight tilt
-  const dir = hotspotWorldPos.clone().sub(camera.position).normalize();
-  camEndPos.copy(camera.position).addScaledVector(dir, 1.8);
-  camEndTgt.copy(hotspotWorldPos);
-}
-
-function updateTransition() {
-  if (!transitioning) return;
-  const elapsed = performance.now() - transitionStartTime;
-  transitionT = Math.min(elapsed / TRANSITION_DURATION, 1);
-
-  // Ease in-out cubic
-  const e = transitionT < 0.5
-    ? 4 * transitionT * transitionT * transitionT
-    : 1 - Math.pow(-2 * transitionT + 2, 3) / 2;
-
-  camera.position.lerpVectors(camStartPos, camEndPos, e);
-  controls.target.lerpVectors(camStartTgt, camEndTgt, e);
-  parallaxGroup.rotation.y = rotStartY + e * 0.35; // léger virage
-
-  // Fade to bg color : démarre pendant le zoom pour faire disparaître l'ensemble pendant le mouvement
-  if (transitionT > 0.25) {
-    const ft = Math.min((transitionT - 0.25) / 0.5, 1);
-    transOverlay.style.opacity = ft;
-    transOverlay.style.pointerEvents = 'auto';
-  }
-
-  if (transitionT >= 1) {
-    transitioning = false;
-    // Ici : déclencher la suite (navigation, callback, etc.)
-    // Pour l'instant on laisse le fade blanc affiché
-  }
-}
+// startSceneTransition / updateTransition remplacés par le système scroll
 
 function extractOndeMeshes(terrainScene) {
   const found = [];
@@ -727,6 +1479,12 @@ function pickAltitudePoints() {
 
   const lineHeights = [28, 38, 50, 34, 60, 42, 26, 55, 32, 46, 44, 30];
 
+  // Mélanger l'ordre de révélation (stagger pseudo-aléatoire)
+  const indices = altMeshLocalPositions.map((_, i) => i);
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
   altitudePoints = altMeshLocalPositions.map((localP, i) => {
     const worldPos = localP.clone();
     parallaxGroup.localToWorld(worldPos);
@@ -736,7 +1494,10 @@ function pickAltitudePoints() {
       baseAlt,
       phase: (i / altMeshLocalPositions.length) * Math.PI * 2 + i * 0.37,
       lineH: lineHeights[i % lineHeights.length],
-      side: i % 2 === 0 ? 1 : -1
+      side: i % 2 === 0 ? 1 : -1,
+      revealOrder: indices.indexOf(i) / Math.max(1, altMeshLocalPositions.length - 1),
+      alpha: 0,        // alpha courant interpolé en dehors du draw
+      lineProgress: 0, // 0→1 : longueur de la ligne qui grandit
     };
   });
 }
@@ -760,51 +1521,83 @@ function projectToScreen(worldPos) {
 }
 
 function drawAnnotations(time) {
-  annotCanvas.width = window.innerWidth;
-  annotCanvas.height = window.innerHeight;
   if (!showAltitudes || altitudePoints.length === 0) { drawHotspot(time); return; }
 
   const color = document.getElementById('altColor').value;
   const fontSize = parseInt(document.getElementById('altFontSize').value);
   const speed = parseFloat(document.getElementById('altSpeed').value);
 
-  annotCtx.strokeStyle = color;
-  annotCtx.fillStyle = color;
-  annotCtx.lineWidth = 1;
-  annotCtx.font = `400 ${fontSize}px 'IBM Plex Mono', monospace`;
-  annotCtx.globalAlpha = annotReveal;
+  // Délai de départ échelonné : chaque point démarre à un moment différent
+  const STAGGER_DELAY = 0.18; // secondes entre chaque point
+  const FADE_DUR = 0.55;      // durée du fade-in en secondes (en unités annotReveal)
+  const LINE_DUR = 0.4;       // durée de croissance de la ligne
 
   altitudePoints.forEach(pt => {
     const sc = projectToScreen(pt.worldPos);
-    if (sc.behind) return;
+    if (sc.behind) { pt.alpha = 0; pt.lineProgress = 0; return; }
+
+    // Cible : 1 si annotReveal a dépassé le délai de ce point, 0 sinon
+    const startThreshold = pt.revealOrder * STAGGER_DELAY * altitudePoints.length / 2.5;
+    const localReveal = Math.max(0, annotReveal - startThreshold / 2.5);
+
+    const targetAlpha = Math.min(localReveal / FADE_DUR, 1);
+    const targetLine  = Math.min(localReveal / LINE_DUR,  1);
+
+    // Lerp doux frame par frame — la vitesse de lerp contrôle la fluidité
+    pt.alpha        += (targetAlpha - pt.alpha)        * 0.18;
+    pt.lineProgress += (targetLine  - pt.lineProgress) * 0.14;
+
+    if (pt.alpha < 0.01) return;
 
     const x = sc.x, y = sc.y;
     const lh = pt.lineH;
     const s = pt.side;
+    const p = pt.lineProgress; // 0→1
 
     const drift = Math.sin(time * speed + pt.phase) * 3.7
                 + Math.sin(time * speed * 0.4 + pt.phase + 1.2) * 1.1;
     const val = pt.baseAlt + drift;
     const label = val.toFixed(1).replace('.', ',');
 
+    annotCtx.globalAlpha = pt.alpha;
+    annotCtx.strokeStyle = color;
+    annotCtx.fillStyle   = color;
+    annotCtx.lineWidth   = 1;
+    annotCtx.font = `400 ${fontSize}px 'IBM Plex Mono', monospace`;
+
+    // Point central
     annotCtx.beginPath();
     annotCtx.arc(x, y, 2, 0, Math.PI * 2);
     annotCtx.fill();
 
-    const tickLen = 10;
+    // Ligne verticale qui grandit vers le haut
+    const lineTop = y - lh * p;
     annotCtx.beginPath();
     annotCtx.moveTo(x, y - 3);
-    annotCtx.lineTo(x, y - lh);
-    annotCtx.lineTo(x + tickLen * s, y - lh);
+    annotCtx.lineTo(x, lineTop);
+    // Tick horizontal seulement si la ligne est complète (p > 0.85)
+    if (p > 0.85) {
+      const tickFade = Math.min((p - 0.85) / 0.15, 1);
+      annotCtx.globalAlpha = pt.alpha * tickFade;
+      annotCtx.lineTo(x + tickLen * s * tickFade, lineTop);
+    }
     annotCtx.stroke();
 
-    annotCtx.textAlign = s === 1 ? 'left' : 'right';
-    annotCtx.textBaseline = 'middle';
-    annotCtx.fillText(label, x + (tickLen + 4) * s, y - lh);
+    // Texte : apparaît une fois que la ligne est presque complète
+    if (p > 0.9) {
+      const textFade = Math.min((p - 0.9) / 0.1, 1);
+      annotCtx.globalAlpha = pt.alpha * textFade;
+      annotCtx.textAlign = s === 1 ? 'left' : 'right';
+      annotCtx.textBaseline = 'middle';
+      annotCtx.fillText(label, x + (tickLen + 4) * s, lineTop);
+    }
   });
+
   annotCtx.globalAlpha = 1;
   drawHotspot(time);
 }
+
+const tickLen = 10;
 
 const fadeOverlay = document.getElementById('fadeOverlay');
 function updateFade() {
@@ -963,20 +1756,7 @@ function loadSavedConfig() {
   if (config) applyConfig(config);
 }
 
-document.getElementById('saveBtn').addEventListener('click', () => {
-  const config = collectConfig();
-  // Save to localStorage
-  localStorage.setItem('terrain_config_v2', JSON.stringify(config));
-  // Encode into URL hash
-  const encoded = encodeConfig(config);
-  history.replaceState(null, '', '#' + encoded);
-
-  const btn = document.getElementById('saveBtn');
-  btn.textContent = 'CONFIG SAUVEGARDÉE ✓';
-  setTimeout(() => btn.textContent = 'SAUVEGARDER CONFIG', 2000);
-});
-
-/* ====================== SCENE OBJECTS ====================== */
+// (hotspot supprimé — scroll-driven zoom)
 let terrainCollisionMesh, pointsObject;
 const housesGroup = new THREE.Group();
 const parallaxGroup = new THREE.Group();
@@ -1031,6 +1811,7 @@ function regenerateGrid() {
       uniform float uRevealRadius;
       uniform vec2  uRevealOrigin;
       uniform float uTerrainReveal;
+      uniform float uWaveSizeBoost;
       varying float vWave;
       varying float vAlpha;
       void main() {
@@ -1048,8 +1829,9 @@ function regenerateGrid() {
         float d = distance(pos.xz, uRevealOrigin);
         vAlpha = smoothstep(0.0, 0.35, uRevealRadius - d);
         vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-        // Taille proportionnelle à la hauteur réelle de l'écran
-        gl_PointSize = uPointSize * (uScreenHeight / -mvPosition.z);
+        // Taille proportionnelle à la hauteur réelle de l'écran, grossissement au passage de l'onde
+        float sizeMultiplier = 1.0 + uWaveSizeBoost * vWave;
+        gl_PointSize = uPointSize * sizeMultiplier * (uScreenHeight / -mvPosition.z);
         gl_Position = projectionMatrix * mvPosition;
         #include <fog_vertex>
       }
@@ -1116,18 +1898,39 @@ async function load() {
   }
 
   loadSavedConfig();
+  loadSavedConfigS2();
   updateHouses();
   updateFade();
   updateBokeh();
   updateSunPosition();
+  updateSunPosition2();
   regenerateGrid();
+  // Init scroll targets maintenant — hotspot est déjà connu
+  updateHotspotWorldPos();
+  initScrollTargets();
   startIntro();
-  // Loading overlay is now managed by intro animation — don't hide it here
 }
 
 /* ====================== UI LISTENERS ====================== */
 const ui = document.getElementById('uiPanel');
-window.addEventListener('keydown', e => { if (e.key === 'Escape') ui.style.display = ui.style.display === 'block' ? 'none' : 'block'; });
+const ui2 = document.getElementById('uiPanel2');
+
+function togglePanel() {
+  if (scene2Active) {
+    ui2.style.display = ui2.style.display === 'block' ? 'none' : 'block';
+    ui.style.display = 'none';
+  } else {
+    ui.style.display = ui.style.display === 'block' ? 'none' : 'block';
+    ui2.style.display = 'none';
+  }
+}
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    togglePanel();
+    if (!scene2Active && ui.style.display === 'block') syncCamSliders();
+    if (scene2Active && ui2.style.display === 'block') syncCam2Sliders();
+  }
+});
 
 function updateSunPosition() {
   const az = parseFloat(document.getElementById('sunAz').value) * Math.PI / 180;
@@ -1138,25 +1941,21 @@ function updateSunPosition() {
     Math.cos(el) * Math.cos(az) * 10
   );
 }
+function updateSunPosition2() {
+  const az = parseFloat(document.getElementById('s2sunAz').value) * Math.PI / 180;
+  const el = parseFloat(document.getElementById('s2sunEl').value) * Math.PI / 180;
+  sun2.position.set(
+    Math.cos(el) * Math.sin(az) * 10,
+    Math.sin(el) * 10,
+    Math.cos(el) * Math.cos(az) * 10
+  );
+}
 
-document.getElementById('ambient').addEventListener('input', e => {
-  ambientLight.intensity = parseFloat(e.target.value);
-  document.getElementById('ambientVal').textContent = e.target.value;
-});
-document.getElementById('sun').addEventListener('input', e => {
-  sun.intensity = parseFloat(e.target.value);
-  document.getElementById('sunVal').textContent = e.target.value;
-});
-
-document.getElementById('sunAz').addEventListener('input', e => {
-  document.getElementById('sunAzVal').textContent = e.target.value;
-  updateSunPosition();
-});
-document.getElementById('sunEl').addEventListener('input', e => {
-  document.getElementById('sunElVal').textContent = e.target.value;
-  updateSunPosition();
-});
-
+// ---- Scène 1 listeners ----
+document.getElementById('ambient').addEventListener('input', e => { ambientLight.intensity = parseFloat(e.target.value); document.getElementById('ambientVal').textContent = e.target.value; });
+document.getElementById('sun').addEventListener('input', e => { sun.intensity = parseFloat(e.target.value); document.getElementById('sunVal').textContent = e.target.value; });
+document.getElementById('sunAz').addEventListener('input', e => { document.getElementById('sunAzVal').textContent = e.target.value; updateSunPosition(); });
+document.getElementById('sunEl').addEventListener('input', e => { document.getElementById('sunElVal').textContent = e.target.value; updateSunPosition(); });
 document.getElementById('fadeHeight').addEventListener('input', e => { document.getElementById('fadeHeightVal').textContent = e.target.value; updateFade(); });
 document.getElementById('fadeOpacity').addEventListener('input', e => { document.getElementById('fadeOpacityVal').textContent = parseFloat(e.target.value).toFixed(2); updateFade(); });
 document.getElementById('fogStart').addEventListener('input', e => { const v = parseFloat(e.target.value); scene.fog.near = v; scene.fog.far = v + 11.0; document.getElementById('fogStartVal').textContent = v; });
@@ -1172,56 +1971,117 @@ document.getElementById('pointSize').addEventListener('input', e => { waveUnifor
 document.getElementById('pointColor').addEventListener('input', e => waveUniforms.uBaseColor.value.set(e.target.value));
 document.getElementById('waveSpeed').addEventListener('input', e => { waveUniforms.uWaveSpeed.value = parseFloat(e.target.value); document.getElementById('waveSpeedVal').textContent = e.target.value; });
 document.getElementById('waveSize').addEventListener('input', e => { waveUniforms.uWaveSize.value = parseFloat(e.target.value); document.getElementById('waveSizeVal').textContent = e.target.value; });
+document.getElementById('waveSizeBoost').addEventListener('input', e => { waveUniforms.uWaveSizeBoost.value = parseFloat(e.target.value); document.getElementById('waveSizeBoostVal').textContent = e.target.value; });
 document.getElementById('waveColor').addEventListener('input', e => waveUniforms.uWaveColor.value.set(e.target.value));
 document.getElementById('houseAlpha').addEventListener('input', e => { updateHouses(); document.getElementById('houseAlphaVal').textContent = e.target.value; });
 document.getElementById('houseColor').addEventListener('input', updateHouses);
 
-/* ====================== ANIMATION ====================== */
-let mx = 0, my = 0;
-window.addEventListener('mousemove', e => {
-  if (settingFocus || settingHotspot) return;
-  // Hotspot hover detection
-  if (hotspotLocalPos && !transitioning) {
-    const dx = e.clientX - hotspotScreenPos.x;
-    const dy = e.clientY - hotspotScreenPos.y;
-    hotspotHovered = Math.hypot(dx, dy) < 28;
-    document.body.style.cursor = hotspotHovered ? 'pointer' : '';
+// ---- Scène 2 listeners ----
+document.getElementById('s2ambient').addEventListener('input', e => { ambientLight2.intensity = parseFloat(e.target.value); document.getElementById('s2ambientVal').textContent = e.target.value; });
+document.getElementById('s2sun').addEventListener('input', e => { sun2.intensity = parseFloat(e.target.value); document.getElementById('s2sunVal').textContent = e.target.value; });
+document.getElementById('s2sunAz').addEventListener('input', e => { document.getElementById('s2sunAzVal').textContent = e.target.value; updateSunPosition2(); });
+document.getElementById('s2sunEl').addEventListener('input', e => { document.getElementById('s2sunElVal').textContent = e.target.value; updateSunPosition2(); });
+document.getElementById('s2density').addEventListener('change', regenerateGrid2);
+document.getElementById('s2density').addEventListener('input', e => document.getElementById('s2densityVal').textContent = e.target.value);
+document.getElementById('s2pointSize').addEventListener('input', e => { waveUniforms2.uPointSize.value = parseFloat(e.target.value); document.getElementById('s2pointSizeVal').textContent = e.target.value; });
+document.getElementById('s2pointColor').addEventListener('input', e => { waveUniforms2.uBaseColor.value.set(e.target.value); });
+
+// ── Scan bâtiment ──
+document.getElementById('s2scan1Color').addEventListener('input', e => {
+  if (!scan1Uniforms) return;
+  scan1Uniforms.uBaseColor.value.set(e.target.value);
+  scan1Uniforms.uScanColor.value.set(e.target.value);
+});
+document.getElementById('s2scan1Size').addEventListener('input', e => {
+  const v = parseFloat(e.target.value);
+  document.getElementById('s2scan1SizeVal').textContent = v;
+  if (scan1Uniforms) scan1Uniforms.uPointSize.value = v;
+});
+document.getElementById('s2scan1Alpha').addEventListener('input', e => {
+  const v = parseFloat(e.target.value);
+  document.getElementById('s2scan1AlphaVal').textContent = v.toFixed(2);
+  if (scan1Uniforms) scan1Uniforms.uBaseAlpha.value = v;
+});
+document.getElementById('s2scan1Speed').addEventListener('input', e => {
+  const v = parseFloat(e.target.value);
+  document.getElementById('s2scan1SpeedVal').textContent = v.toFixed(1);
+  scan1Speed = v;
+});
+document.getElementById('s2scan1Density').addEventListener('input', e => {
+  document.getElementById('s2scan1DensityVal').textContent = e.target.value;
+});
+document.getElementById('s2scan1Density').addEventListener('change', e => {
+  if (!scan1Mesh || !scan1Mat_ref) return;
+  const v = parseInt(e.target.value);
+  document.getElementById('s2scan1DensityVal').textContent = v;
+  if (scan1Points) { parallaxGroup2.remove(scan1Points); scan1Points.geometry.dispose(); }
+  const bw = new THREE.Box3().setFromObject(scan1Mesh);
+  const bMn = bw.min, bMx = bw.max, bSz = bw.getSize(new THREE.Vector3());
+  const pos = [], rnd = [];
+  for (let ix = 0; ix <= v; ix++) for (let iy = 0; iy <= v; iy++) for (let iz = 0; iz <= v; iz++) {
+    pos.push(bMn.x+(ix/v)*bSz.x+(Math.random()-.5)*(bSz.x/v)*.9,
+             bMn.y+(iy/v)*bSz.y+(Math.random()-.5)*(bSz.y/v)*.9,
+             bMn.z+(iz/v)*bSz.z+(Math.random()-.5)*(bSz.z/v)*.9);
+    rnd.push(Math.random());
   }
-  if (hotspotHovered) return;
-  mx = (e.clientX / window.innerWidth - 0.5) * 0.4;
-  my = (e.clientY / window.innerHeight - 0.5) * 0.4;
+  const lp = [], tmp = new THREE.Vector3();
+  for (let i = 0; i < pos.length; i += 3) {
+    tmp.set(pos[i], pos[i+1], pos[i+2]); parallaxGroup2.worldToLocal(tmp);
+    lp.push(tmp.x, tmp.y, tmp.z);
+  }
+  // Mettre à jour uYMin/uYMax en espace local
+  const bMnL = new THREE.Vector3().copy(bMn); parallaxGroup2.worldToLocal(bMnL);
+  const bMxL = new THREE.Vector3().copy(bMx); parallaxGroup2.worldToLocal(bMxL);
+  scan1Uniforms.uYMin.value = Math.min(bMnL.y, bMxL.y);
+  scan1Uniforms.uYMax.value = Math.max(bMnL.y, bMxL.y);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
+  g.setAttribute('normal',   new THREE.Float32BufferAttribute(new Float32Array(lp.length), 3));
+  g.setAttribute('aRandom',  new THREE.Float32BufferAttribute(rnd, 1));
+  scan1Points = new THREE.Points(g, scan1Mat_ref);
+  scan1Points.frustumCulled = false;
+  parallaxGroup2.add(scan1Points);
 });
 
-document.getElementById('canvas').addEventListener('click', e => {
-  if (settingFocus) return;
-
-  // Placement du hotspot par raycast
-  if (settingHotspot) {
-    const rect = renderer.domElement.getBoundingClientRect();
-    const ndc = new THREE.Vector2(
-      ((e.clientX - rect.left) / rect.width) * 2 - 1,
-      -((e.clientY - rect.top) / rect.height) * 2 + 1
-    );
-    const ray = new THREE.Raycaster();
-    ray.setFromCamera(ndc, camera);
-    const hits = ray.intersectObject(terrainCollisionMesh, true);
-    if (hits.length > 0) {
-      const wp = hits[0].point;
-      hotspotLocalPos = parallaxGroup.worldToLocal(wp.clone());
-    }
-    settingHotspot = false;
-    document.getElementById('setHotspotBtn').textContent = 'PLACER LE HOTSPOT';
-    document.getElementById('hotspotHint').style.display = 'none';
-    document.body.classList.remove('focus-mode');
-    return;
-  }
-
-  if (hotspotHovered && !transitioning) {
-    startSceneTransition();
-  }
+// ── Onde de sol ──
+const sweepCfg = { range: 8.0, cycle: 7.0 };
+document.getElementById('s2sweepColor').addEventListener('input', e => { waveUniforms2.uSweepColor.value.set(e.target.value); });
+document.getElementById('s2sweepWidth').addEventListener('input', e => {
+  const v = parseFloat(e.target.value);
+  document.getElementById('s2sweepWidthVal').textContent = v.toFixed(2);
+  waveUniforms2.uSweepWidth.value = v;
 });
-
-// Camera controls
+document.getElementById('s2sweepRange').addEventListener('input', e => {
+  const v = parseFloat(e.target.value);
+  document.getElementById('s2sweepRangeVal').textContent = v.toFixed(2);
+  sweepCfg.range = v;
+});
+document.getElementById('s2sweepCycle').addEventListener('input', e => {
+  const v = parseFloat(e.target.value);
+  document.getElementById('s2sweepCycleVal').textContent = v.toFixed(2);
+  sweepCfg.cycle = v;
+});
+document.getElementById('s2sweepStrength').addEventListener('input', e => {
+  const v = parseFloat(e.target.value);
+  document.getElementById('s2sweepStrengthVal').textContent = v.toFixed(2);
+  waveUniforms2.uSweepStrength.value = v;
+});
+document.getElementById('s2shadowOpacity').addEventListener('input', e => {
+  const v = parseFloat(e.target.value);
+  document.getElementById('s2shadowOpacityVal').textContent = v.toFixed(2);
+  if (scene2ShadowMesh) scene2ShadowMesh.material.opacity = v;
+});
+['s2shadowRot', 's2shadowScale', 's2shadowOffX', 's2shadowOffZ'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', e => {
+    const v = parseFloat(e.target.value);
+    const valEl = document.getElementById(id + 'Val');
+    if (valEl) valEl.textContent = (id === 's2shadowRot') ? Math.round(v) : v.toFixed(2);
+    applyShadowTransform2();
+  });
+});
+document.getElementById('s2shadowBlend').addEventListener('change', applyShadowBlend2);
+// Caméra scène 1
 function syncCamSliders() {
   document.getElementById('camPx').value = camera.position.x;
   document.getElementById('camPy').value = camera.position.y;
@@ -1236,10 +2096,9 @@ function syncCamSliders() {
   document.getElementById('camTyVal').textContent = controls.target.y.toFixed(3);
   document.getElementById('camTzVal').textContent = controls.target.z.toFixed(3);
 }
-
 ['camPx','camPy','camPz'].forEach(id => {
   document.getElementById(id).addEventListener('input', e => {
-    const axis = id.slice(-1); // x, y, z
+    const axis = id.slice(-1);
     camera.position[axis] = parseFloat(e.target.value);
     document.getElementById(id + 'Val').textContent = parseFloat(e.target.value).toFixed(3);
     controls.update();
@@ -1253,43 +2112,204 @@ function syncCamSliders() {
     controls.update();
   });
 });
-
-// Sync sliders when panel opens
-window.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && document.getElementById('uiPanel').style.display === 'block') syncCamSliders();
-});
-
 document.getElementById('copyCamBtn').addEventListener('click', () => {
   const txt = `camera.position.set(${camera.position.x.toFixed(4)}, ${camera.position.y.toFixed(4)}, ${camera.position.z.toFixed(4)});\ncontrols.target.set(${controls.target.x.toFixed(4)}, ${controls.target.y.toFixed(4)}, ${controls.target.z.toFixed(4)});`;
-  navigator.clipboard.writeText(txt).then(() => {
-    const note = document.getElementById('camCopyNote');
-    note.style.display = 'block';
-    setTimeout(() => note.style.display = 'none', 2000);
-  });
+  navigator.clipboard.writeText(txt).then(() => { const n = document.getElementById('camCopyNote'); n.style.display = 'block'; setTimeout(() => n.style.display = 'none', 2000); });
 });
 
-document.getElementById('setHotspotBtn').addEventListener('click', () => {
-  settingHotspot = !settingHotspot;
-  settingFocus = false;
-  document.getElementById('setHotspotBtn').textContent = settingHotspot ? 'ANNULER' : 'PLACER LE HOTSPOT';
-  document.getElementById('hotspotHint').style.display = settingHotspot ? 'block' : 'none';
-  document.body.classList.toggle('focus-mode', settingHotspot);
+// Caméra scène 2 — orthographique
+function syncCam2Sliders() {
+  // Recalculer az/el depuis la position actuelle de la caméra
+  const tx = controls2.target.x, ty = controls2.target.y, tz = controls2.target.z;
+  const dx = camera2.position.x - tx;
+  const dy = camera2.position.y - ty;
+  const dz = camera2.position.z - tz;
+  const r  = Math.sqrt(dx*dx + dy*dy + dz*dz) || 1;
+  const el = Math.asin(dy / r) * 180 / Math.PI;
+  const az = Math.atan2(dx, dz) * 180 / Math.PI;
+  const zoom = parseFloat(document.getElementById('s2orthoZoom').value);
+
+  document.getElementById('s2orthoEl').value  = el.toFixed(1);
+  document.getElementById('s2orthoElVal').textContent = el.toFixed(1);
+  document.getElementById('s2orthoAz').value  = ((az % 360) + 360) % 360;
+  document.getElementById('s2orthoAzVal').textContent = (((az % 360) + 360) % 360).toFixed(1);
+  document.getElementById('s2orthoZoom').value = zoom;
+  document.getElementById('s2orthoZoomVal').textContent = zoom.toFixed(2);
+  document.getElementById('s2camTx').value = tx.toFixed(3);
+  document.getElementById('s2camTxVal').textContent = tx.toFixed(3);
+  document.getElementById('s2camTy').value = ty.toFixed(3);
+  document.getElementById('s2camTyVal').textContent = ty.toFixed(3);
+  document.getElementById('s2camTz').value = tz.toFixed(3);
+  document.getElementById('s2camTzVal').textContent = tz.toFixed(3);
+}
+['s2orthoZoom','s2orthoAz','s2orthoEl','s2camTx','s2camTy','s2camTz'].forEach(id => {
+  document.getElementById(id).addEventListener('input', e => {
+    const vEl = document.getElementById(id + 'Val');
+    if (vEl) vEl.textContent = parseFloat(e.target.value).toFixed(id === 's2orthoZoom' ? 2 : (id.startsWith('s2camT') ? 3 : 1));
+    updateOrthoCamera();
+  });
 });
+document.getElementById('s2copyCamBtn').addEventListener('click', () => {
+  const zoom = parseFloat(document.getElementById('s2orthoZoom').value);
+  const az   = parseFloat(document.getElementById('s2orthoAz').value);
+  const el   = parseFloat(document.getElementById('s2orthoEl').value);
+  const tx   = parseFloat(document.getElementById('s2camTx').value);
+  const ty   = parseFloat(document.getElementById('s2camTy').value);
+  const tz   = parseFloat(document.getElementById('s2camTz').value);
+  const txt  = `zoom:${zoom} az:${az}° el:${el}° cible:(${tx},${ty},${tz})`;
+  navigator.clipboard.writeText(txt).then(() => { const n = document.getElementById('s2camCopyNote'); n.style.display = 'block'; setTimeout(() => n.style.display = 'none', 2000); });
+});
+
+document.getElementById('saveBtn').addEventListener('click', () => {
+  const config = collectConfig();
+  localStorage.setItem('terrain_config_v2', JSON.stringify(config));
+  const encoded = encodeConfig(config);
+  history.replaceState(null, '', '#' + encoded);
+  const btn = document.getElementById('saveBtn');
+  btn.textContent = 'CONFIG SAUVEGARDÉE ✓';
+  setTimeout(() => btn.textContent = 'SAUVEGARDER CONFIG', 2000);
+});
+
+document.getElementById('s2saveBtn').addEventListener('click', () => {
+  const config2 = {
+    s2ambient: document.getElementById('s2ambient').value,
+    s2sun: document.getElementById('s2sun').value,
+    s2sunAz: document.getElementById('s2sunAz').value,
+    s2sunEl: document.getElementById('s2sunEl').value,
+    s2density: document.getElementById('s2density').value,
+    s2pointSize: document.getElementById('s2pointSize').value,
+    s2pointColor: document.getElementById('s2pointColor').value,
+    s2sweepColor: document.getElementById('s2sweepColor').value,
+    s2sweepWidth: document.getElementById('s2sweepWidth').value,
+    s2sweepRange: document.getElementById('s2sweepRange').value,
+    s2sweepCycle: document.getElementById('s2sweepCycle').value,
+    s2sweepStrength: document.getElementById('s2sweepStrength').value,
+    s2shadowOpacity: document.getElementById('s2shadowOpacity').value,
+    s2shadowRot: document.getElementById('s2shadowRot').value,
+    s2shadowScale: document.getElementById('s2shadowScale').value,
+    s2shadowOffX: document.getElementById('s2shadowOffX').value,
+    s2shadowOffZ: document.getElementById('s2shadowOffZ').value,
+    s2shadowBlend: document.getElementById('s2shadowBlend').value,
+    s2orthoZoom: document.getElementById('s2orthoZoom').value,
+    s2orthoAz:   document.getElementById('s2orthoAz').value,
+    s2orthoEl:   document.getElementById('s2orthoEl').value,
+    s2camTx: document.getElementById('s2camTx').value,
+    s2camTy: document.getElementById('s2camTy').value,
+    s2camTz: document.getElementById('s2camTz').value,
+  };
+  localStorage.setItem('terrain_config_s2', JSON.stringify(config2));
+  const btn = document.getElementById('s2saveBtn');
+  btn.textContent = 'SCÈNE 2 SAUVEGARDÉE ✓';
+  setTimeout(() => btn.textContent = 'SAUVEGARDER CONFIG S2', 2000);
+});
+
+function loadSavedConfigS2() {
+  const ls = localStorage.getItem('terrain_config_s2');
+  if (!ls) return;
+  try {
+    const cfg = JSON.parse(ls);
+    Object.keys(cfg).forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = cfg[id];
+      const vEl = document.getElementById(id + 'Val');
+      if (vEl) vEl.textContent = cfg[id];
+    });
+    ambientLight2.intensity = parseFloat(cfg.s2ambient || 1.35);
+    sun2.intensity = parseFloat(cfg.s2sun || 1.85);
+    updateSunPosition2();
+    waveUniforms2.uPointSize.value = parseFloat(cfg.s2pointSize || 0.005);
+    if (cfg.s2pointColor) waveUniforms2.uBaseColor.value.set(cfg.s2pointColor);
+    if (cfg.s2sweepColor) waveUniforms2.uSweepColor.value.set(cfg.s2sweepColor);
+    if (cfg.s2sweepWidth !== undefined) waveUniforms2.uSweepWidth.value = parseFloat(cfg.s2sweepWidth);
+    if (cfg.s2sweepRange !== undefined) sweepCfg.range = parseFloat(cfg.s2sweepRange);
+    if (cfg.s2sweepCycle !== undefined) sweepCfg.cycle = parseFloat(cfg.s2sweepCycle);
+    if (cfg.s2sweepStrength !== undefined) waveUniforms2.uSweepStrength.value = parseFloat(cfg.s2sweepStrength);
+    if (scene2ShadowMesh && cfg.s2shadowOpacity !== undefined) scene2ShadowMesh.material.opacity = parseFloat(cfg.s2shadowOpacity);
+    if (scene2ShadowMesh) applyShadowTransform2();
+    if (scene2ShadowMesh) applyShadowBlend2();
+    // Caméra ortho — updateOrthoCamera lira les sliders déjà mis à jour par la boucle forEach ci-dessus
+    updateOrthoCamera();
+  } catch(e) {}
+}
+
+/* ====================== ANIMATION ====================== */
+let mx = 0, my = 0;
+window.addEventListener('mousemove', e => {
+  if (settingFocus) return;
+  mx = (e.clientX / window.innerWidth - 0.5) * 0.4;
+  my = (e.clientY / window.innerHeight - 0.5) * 0.4;
+});
+
+document.getElementById('canvas').addEventListener('click', e => {
+  if (!settingFocus) return;
+  focusX = (e.clientX / window.innerWidth) * 100;
+  focusY = (e.clientY / window.innerHeight) * 100;
+  settingFocus = false;
+  document.getElementById('setFocusBtn').textContent = 'PLACER LE FOCUS';
+  document.getElementById('focusHint').style.display = 'none';
+  document.body.classList.remove('focus-mode');
+  focusCursor.style.display = 'none';
+  updateBokeh();
+});
+// (hotspot supprimé — scroll-driven zoom)
 
 const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
   const t = clock.getElapsedTime();
+
+  annotCanvas.width = window.innerWidth;
+  annotCanvas.height = window.innerHeight;
+  annotCtx.clearRect(0, 0, annotCanvas.width, annotCanvas.height);
+
+  // ===== SCÈNE 1 — toujours rendue sur renderer principal =====
   waveUniforms.uTime.value = t;
-  parallaxGroup.rotation.y += (mx * 0.12 - parallaxGroup.rotation.y) * 0.1;
+  parallaxGroup.rotation.y += (mx * 0.12 + scrollRotOffset - parallaxGroup.rotation.y) * 0.1;
   parallaxGroup.rotation.x += (my * 0.12 - parallaxGroup.rotation.x) * 0.1;
   controls.update();
   renderer.render(scene, camera);
-  if (introPlaying) updateIntro((performance.now() - introStart) / 1000);
-  updateHotspotWorldPos();
-  updateTransition();
-  updateAltWorldPositions();
-  drawAnnotations(t);
+
+  if (introPlaying) {
+    updateIntro((performance.now() - introStart) / 1000);
+  } else {
+    updateScrollAndTransition();
+    updateHotspotWorldPos();
+    updateAltWorldPositions();
+    if (!scene2Active) drawAnnotations(t);
+  }
+
+  // ===== SCÈNE 2 — rendue sur renderer2 quand chargée =====
+  if (scene2Loaded) {
+    waveUniforms2.uTime.value = t;
+    // Onde diagonale bas-gauche → haut-droite : oscille en boucle.
+    const sweepCycle = sweepCfg.cycle;
+    const sweepRange = sweepCfg.range;
+    const phase = ((t % sweepCycle) / sweepCycle);
+    waveUniforms2.uSweepPos.value = -sweepRange / 2 + phase * sweepRange;
+    // Scans des bâtiments scan1/2/3
+    // Scans des bâtiments supprimés
+    if (scan1Uniforms) {
+      scan1Uniforms.uTime.value = t;
+      const TRAVEL = scan1Speed;
+      const cycle = t % (TRAVEL * 2);
+      if (cycle < TRAVEL) {
+        // Descente : la bande recouvre le bâtiment du haut vers le bas
+        // uScanDir = -1 → traîne vers le haut (derrière la bande qui descend)
+        const u = cycle / TRAVEL;
+        scan1Uniforms.uScanY.value = scan1Uniforms.uYMax.value + (scan1Uniforms.uYMin.value - scan1Uniforms.uYMax.value) * u;
+        scan1Uniforms.uScanDir.value = -1.0;
+      } else {
+        // Montée : la bande découvre le bâtiment du bas vers le haut
+        // uScanDir = +1 → traîne vers le bas (derrière la bande qui monte)
+        const u = (cycle - TRAVEL) / TRAVEL;
+        scan1Uniforms.uScanY.value = scan1Uniforms.uYMin.value + (scan1Uniforms.uYMax.value - scan1Uniforms.uYMin.value) * u;
+        scan1Uniforms.uScanDir.value = 1.0;
+      }
+    }
+    parallaxGroup2.rotation.y += (mx * 0.14 - parallaxGroup2.rotation.y) * 0.08;
+    parallaxGroup2.rotation.x += (my * 0.10 - parallaxGroup2.rotation.x) * 0.08;
+    renderer2.render(scene2, camera2);
+  }
 }
 
 load(); animate();
@@ -1297,7 +2317,10 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer2.setSize(window.innerWidth, window.innerHeight);
   waveUniforms.uScreenHeight.value = window.innerHeight;
+  waveUniforms2.uScreenHeight.value = window.innerHeight;
+  updateOrthoCamera();
   if (bokehEnabled) updateBokeh();
 });
 </script>
