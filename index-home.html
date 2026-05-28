@@ -45,42 +45,29 @@
   #scrollHint svg { animation: bounce 1.6s ease-in-out infinite; }
   @keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(5px); } }
 
-  .panel {
-    position: fixed; top: 24px; right: 24px; width: 300px;
-    background: var(--panel-bg); backdrop-filter: blur(20px);
-    border: 1px solid var(--panel-border); padding: 20px;
-    font-size: 11px; z-index: 10; display: none;
-    max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0,0,0,0.5);
-    scrollbar-width: thin; scrollbar-color: var(--accent) transparent;
-  }
-  .panel::-webkit-scrollbar { width: 6px; }
-  .panel::-webkit-scrollbar-track { background: rgba(255,255,255,0.04); }
-  .panel::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 3px; }
-  .panel::-webkit-scrollbar-thumb:hover { background: #6289ff; }
-  .group-title { font-size: 9px; letter-spacing: 0.2em; color: #7a82a8; margin: 15px 0 10px 0; display: flex; align-items: center; gap: 8px; text-transform: uppercase; }
-  .group-title::after { content: ''; flex: 1; height: 1px; background: var(--panel-border); }
-  .control { margin-bottom: 10px; }
-  .control label { display: flex; justify-content: space-between; margin-bottom: 4px; }
-  .control label .value { color: var(--accent); font-weight: 600; }
-  input[type="range"] { -webkit-appearance: none; width: 100%; height: 1px; background: #1f2d7a; outline: none; }
-  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: var(--accent); border-radius: 50%; cursor: pointer; }
-  .color-control { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-  .color-wrapper { width: 30px; height: 18px; border: 1px solid var(--panel-border); overflow: hidden; position: relative; }
-  input[type="color"] { position: absolute; width: 200%; height: 200%; top: -50%; left: -50%; cursor: pointer; border: none; background: none; }
-  .toggle-control { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-  .toggle-label { font-size: 11px; color: var(--text); }
-  .toggle-btn { width: 36px; height: 18px; background: #1f2d7a; border-radius: 9px; position: relative; cursor: pointer; border: 1px solid var(--panel-border); transition: background 0.2s; flex-shrink: 0; }
-  .toggle-btn.on { background: var(--accent); }
-  .toggle-btn::after { content: ''; position: absolute; width: 12px; height: 12px; border-radius: 50%; background: white; top: 2px; left: 2px; transition: transform 0.2s; }
-  .toggle-btn.on::after { transform: translateX(18px); }
-  .btn-row { display: flex; gap: 8px; margin-top: 8px; }
-  .btn { flex: 1; padding: 8px; background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 2px; font-family: inherit; font-size: 9px; font-weight: 600; letter-spacing: 0.1em; cursor: pointer; transition: background 0.2s, color 0.2s; text-align: center; }
-  .btn:hover { background: var(--accent); color: white; }
-  .btn-save { display: block; width: 100%; padding: 10px; background: var(--accent); color: white; border: none; border-radius: 2px; font-family: inherit; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; cursor: pointer; margin-top: 16px; transition: opacity 0.2s; }
-  .btn-save:hover { opacity: 0.8; }
-  .hint { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); font-size: 9px; color: var(--accent); letter-spacing: 0.2em; opacity: 0.6; pointer-events: none; }
-  .save-note { font-size: 9px; color: #7a82a8; margin-top: 8px; line-height: 1.5; }
   .loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg); z-index: 200; }
+
+  #dot-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-template-rows: repeat(5, 1fr);
+    gap: 3px;
+    width: 32px;
+    height: 32px;
+  }
+  .dot {
+    width: 100%; height: 100%;
+    background-color: #001DFC;
+    border-radius: 50%;
+    transition: background-color 0.3s ease, transform 0.3s ease, opacity 0.6s ease;
+    will-change: transform, background-color, opacity;
+  }
+  .dot.ripple {
+    background-color: #00FCD9;
+    transform: scale(1.2);
+    transition: background-color 0.15s ease, transform 0.15s ease;
+  }
+  .dot.erase { opacity: 0; transform: scale(0.3); }
 </style>
 </head>
 <body>
@@ -95,332 +82,10 @@
 <div id="whiteOverlay" style="position:fixed;inset:0;z-index:5;background:#F2F3FF;opacity:0;pointer-events:none;"></div>
 
 <!-- Scroll hint -->
-<div id="scrollHint">
-  <span>DÉFILER POUR EXPLORER</span>
-  <svg width="14" height="20" viewBox="0 0 14 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect x="1" y="1" width="12" height="18" rx="6" stroke="#5B7BFF" stroke-width="1.2"/>
-    <circle cx="7" cy="6" r="1.8" fill="#5B7BFF"/>
-  </svg>
-</div>
 
-<div class="hint" id="configHint">SCÈNE 1 — CONFIGURATEUR [ESC]</div>
-<div id="loading" class="loading"><div style="color:var(--accent); letter-spacing: 0.3em; font-size: 10px;">CHARGEMENT...</div></div>
-
-<!-- ===== PANNEAU SCÈNE 1 ===== -->
-<div class="panel" id="uiPanel">
-  <div style="font-weight: 600; color: var(--accent); letter-spacing: 0.2em; margin-bottom: 4px; font-size: 12px;">PARAMÈTRES — SCÈNE 1</div>
-  <div style="font-size: 9px; color: #7a82a8; margin-bottom: 18px; letter-spacing: 0.1em;">terrain.glb + maisons.glb</div>
-
-  <div class="group-title">ÉCLAIRAGE</div>
-  <div class="control">
-    <label>Lumière ambiante <span class="value" id="ambientVal">1.35</span></label>
-    <input type="range" id="ambient" min="0" max="3" step="0.05" value="1.35">
-  </div>
-  <div class="control">
-    <label>Soleil <span class="value" id="sunVal">1.85</span></label>
-    <input type="range" id="sun" min="0" max="5" step="0.05" value="1.85">
-  </div>
-  <div class="control">
-    <label>Azimut <span class="value" id="sunAzVal">233</span>°</label>
-    <input type="range" id="sunAz" min="0" max="360" step="1" value="233">
-  </div>
-  <div class="control">
-    <label>Élévation <span class="value" id="sunElVal">90</span>°</label>
-    <input type="range" id="sunEl" min="0" max="90" step="1" value="90">
-  </div>
-
-  <div class="group-title">FOND DE CARTE</div>
-  <div class="control">
-    <label>Début du Fog <span class="value" id="fogStartVal">20</span></label>
-    <input type="range" id="fogStart" min="0" max="20" step="0.1" value="20">
-  </div>
-  <div class="control">
-    <label>Hauteur fade <span class="value" id="fadeHeightVal">30</span>%</label>
-    <input type="range" id="fadeHeight" min="0" max="100" step="1" value="30">
-  </div>
-  <div class="control">
-    <label>Intensité fade <span class="value" id="fadeOpacityVal">1.00</span></label>
-    <input type="range" id="fadeOpacity" min="0" max="1" step="0.01" value="1">
-  </div>
-
-  <div class="group-title">BOKEH / FOCUS</div>
-  <div class="toggle-control">
-    <span class="toggle-label">Activer le bokeh</span>
-    <div class="toggle-btn on" id="bokehToggle"></div>
-  </div>
-  <div id="bokehControls" style="display:block">
-    <div class="control">
-      <label>Intensité flou <span class="value" id="bokehBlurVal">30</span>px</label>
-      <input type="range" id="bokehBlur" min="1" max="30" step="1" value="30">
-    </div>
-    <div class="control">
-      <label>Rayon net <span class="value" id="bokehRadiusVal">59</span>%</label>
-      <input type="range" id="bokehRadius" min="5" max="70" step="1" value="59">
-    </div>
-    <div class="control">
-      <label>Douceur transition <span class="value" id="bokehSoftnessVal">25</span>%</label>
-      <input type="range" id="bokehSoftness" min="0" max="80" step="1" value="25">
-    </div>
-    <div class="btn-row">
-      <div class="btn" id="setFocusBtn">PLACER LE FOCUS</div>
-    </div>
-    <p class="save-note" id="focusHint" style="display:none">Cliquez sur la carte pour placer le point de focus</p>
-  </div>
-
-  <div class="group-title">TOPOGRAPHIE</div>
-  <div class="control">
-    <label>Rapprochement <span class="value" id="topoSpacingVal">94</span></label>
-    <input type="range" id="topoSpacing" min="10" max="300" step="1" value="94">
-  </div>
-  <div class="control">
-    <label>Finesse <span class="value" id="topoWidthVal">0.10</span></label>
-    <input type="range" id="topoWidth" min="0.05" max="1.5" step="0.05" value="0.10">
-  </div>
-  <div class="color-control">
-    <label>Couleur traits</label>
-    <div class="color-wrapper"><input type="color" id="topoColor" value="#6289ff"></div>
-  </div>
-
-  <div class="group-title">ALTITUDES</div>
-  <div class="toggle-control">
-    <span class="toggle-label">Afficher les altitudes</span>
-    <div class="toggle-btn on" id="altToggle"></div>
-  </div>
-  <div class="control">
-    <label>Vitesse animation <span class="value" id="altSpeedVal">0.30</span></label>
-    <input type="range" id="altSpeed" min="0.01" max="2" step="0.01" value="0.30">
-  </div>
-  <div class="control">
-    <label>Taille du texte <span class="value" id="altFontSizeVal">11</span>px</label>
-    <input type="range" id="altFontSize" min="7" max="20" step="1" value="11">
-  </div>
-  <div class="color-control">
-    <label>Couleur altitudes</label>
-    <div class="color-wrapper"><input type="color" id="altColor" value="#5B7BFF"></div>
-  </div>
-
-  <div class="group-title">POINTS</div>
-  <div class="control">
-    <label>Densité <span class="value" id="densityVal">202</span></label>
-    <input type="range" id="density" min="50" max="600" step="1" value="202">
-  </div>
-  <div class="control">
-    <label>Taille <span class="value" id="pointSizeVal">0.025</span></label>
-    <input type="range" id="pointSize" min="0.005" max="0.1" step="0.001" value="0.005">
-  </div>
-  <div class="color-control">
-    <label>Couleur base</label>
-    <div class="color-wrapper"><input type="color" id="pointColor" value="#0033FF"></div>
-  </div>
-
-  <div class="group-title">ONDE</div>
-  <div class="control">
-    <label>Vitesse <span class="value" id="waveSpeedVal">0.5</span></label>
-    <input type="range" id="waveSpeed" min="0.1" max="5.0" step="0.1" value="0.5">
-  </div>
-  <div class="control">
-    <label>Fréquence <span class="value" id="waveSizeVal">0.8</span></label>
-    <input type="range" id="waveSize" min="0.5" max="10.0" step="0.1" value="0.8">
-  </div>
-  <div class="control">
-    <label>Grossissement <span class="value" id="waveSizeBoostVal">1.5</span>×</label>
-    <input type="range" id="waveSizeBoost" min="0" max="5" step="0.1" value="1.5">
-  </div>
-  <div class="color-control">
-    <label>Couleur onde</label>
-    <div class="color-wrapper"><input type="color" id="waveColor" value="#85ffe7"></div>
-  </div>
-
-  <div class="group-title">CAMÉRA</div>
-  <div class="control">
-    <label>Pos X <span class="value" id="camPxVal">1.179</span></label>
-    <input type="range" id="camPx" min="-10" max="10" step="0.001" value="1.179">
-  </div>
-  <div class="control">
-    <label>Pos Y <span class="value" id="camPyVal">1.808</span></label>
-    <input type="range" id="camPy" min="-5" max="15" step="0.001" value="1.808">
-  </div>
-  <div class="control">
-    <label>Pos Z <span class="value" id="camPzVal">2.840</span></label>
-    <input type="range" id="camPz" min="-10" max="10" step="0.001" value="2.840">
-  </div>
-  <div class="control">
-    <label>Cible X <span class="value" id="camTxVal">-0.361</span></label>
-    <input type="range" id="camTx" min="-5" max="5" step="0.001" value="-0.361">
-  </div>
-  <div class="control">
-    <label>Cible Y <span class="value" id="camTyVal">0.285</span></label>
-    <input type="range" id="camTy" min="-5" max="5" step="0.001" value="0.285">
-  </div>
-  <div class="control">
-    <label>Cible Z <span class="value" id="camTzVal">0.235</span></label>
-    <input type="range" id="camTz" min="-5" max="5" step="0.001" value="0.235">
-  </div>
-  <div class="btn-row" style="margin-bottom:8px">
-    <div class="btn" id="copyCamBtn">COPIER POSITION</div>
-  </div>
-  <p class="save-note" id="camCopyNote" style="display:none;color:var(--accent)">Position copiée ✓</p>
-
-  <div class="group-title">MAISONS</div>
-  <div class="control">
-    <label>Opacité <span class="value" id="houseAlphaVal">1.0</span></label>
-    <input type="range" id="houseAlpha" min="0" max="1" step="0.05" value="1">
-  </div>
-  <div class="color-control">
-    <label>Couleur</label>
-    <div class="color-wrapper"><input type="color" id="houseColor" value="#b3c6ff"></div>
-  </div>
-
-  <button class="btn-save" id="saveBtn">SAUVEGARDER CONFIG</button>
-  <p class="save-note">Config encodée dans l'URL — copiez l'adresse pour la partager ou la conserver.</p>
-</div>
-
-<!-- ===== PANNEAU SCÈNE 2 ===== -->
-<div class="panel" id="uiPanel2">
-  <div style="font-weight: 600; color: var(--accent); letter-spacing: 0.2em; margin-bottom: 4px; font-size: 12px;">PARAMÈTRES — SCÈNE 2</div>
-  <div style="font-size: 9px; color: #7a82a8; margin-bottom: 18px; letter-spacing: 0.1em;">terrain2.glb + maisons2.glb</div>
-
-  <div class="group-title">ÉCLAIRAGE</div>
-  <div class="control">
-    <label>Lumière ambiante <span class="value" id="s2ambientVal">1.45</span></label>
-    <input type="range" id="s2ambient" min="0" max="3" step="0.05" value="1.45">
-  </div>
-  <div class="control">
-    <label>Soleil <span class="value" id="s2sunVal">3.45</span></label>
-    <input type="range" id="s2sun" min="0" max="5" step="0.05" value="3.45">
-  </div>
-  <div class="control">
-    <label>Azimut <span class="value" id="s2sunAzVal">322</span>°</label>
-    <input type="range" id="s2sunAz" min="0" max="360" step="1" value="322">
-  </div>
-  <div class="control">
-    <label>Élévation <span class="value" id="s2sunElVal">68</span>°</label>
-    <input type="range" id="s2sunEl" min="0" max="90" step="1" value="68">
-  </div>
-
-  <div class="group-title">POINTS</div>
-  <div class="control">
-    <label>Densité <span class="value" id="s2densityVal">249</span></label>
-    <input type="range" id="s2density" min="50" max="600" step="1" value="249">
-  </div>
-  <div class="control">
-    <label>Taille <span class="value" id="s2pointSizeVal">0.055</span></label>
-    <input type="range" id="s2pointSize" min="0.005" max="0.1" step="0.001" value="0.055">
-  </div>
-  <div class="color-control">
-    <label>Couleur base</label>
-    <div class="color-wrapper"><input type="color" id="s2pointColor" value="#0033FF"></div>
-  </div>
+<div id="loading" class="loading"><div id="dot-grid"></div></div>
 
 
-  <div class="group-title">SCAN BÂTIMENT</div>
-  <div class="color-control">
-    <label>Couleur</label>
-    <div class="color-wrapper"><input type="color" id="s2scan1Color" value="#00ffee"></div>
-  </div>
-  <div class="control">
-    <label>Taille sphères <span class="value" id="s2scan1SizeVal">23</span></label>
-    <input type="range" id="s2scan1Size" min="5" max="150" step="1" value="23">
-  </div>
-  <div class="control">
-    <label>Densité <span class="value" id="s2scan1DensityVal">50</span></label>
-    <input type="range" id="s2scan1Density" min="8" max="50" step="1" value="50">
-  </div>
-  <div class="control">
-    <label>Fond ambiant <span class="value" id="s2scan1AlphaVal">0.00</span></label>
-    <input type="range" id="s2scan1Alpha" min="0" max="0.5" step="0.01" value="0.00">
-  </div>
-  <div class="control">
-    <label>Vitesse <span class="value" id="s2scan1SpeedVal">3.0</span> s</label>
-    <input type="range" id="s2scan1Speed" min="0.5" max="10" step="0.1" value="3.0">
-  </div>
-
-  <div class="group-title">ONDE DE SOL</div>
-  <div class="color-control">
-    <label>Couleur</label>
-    <div class="color-wrapper"><input type="color" id="s2sweepColor" value="#12EBC7"></div>
-  </div>
-  <div class="control">
-    <label>Largeur <span class="value" id="s2sweepWidthVal">1.80</span></label>
-    <input type="range" id="s2sweepWidth" min="0.1" max="6" step="0.05" value="1.80">
-  </div>
-  <div class="control">
-    <label>Amplitude <span class="value" id="s2sweepRangeVal">8.00</span></label>
-    <input type="range" id="s2sweepRange" min="2" max="20" step="0.1" value="8.00">
-  </div>
-  <div class="control">
-    <label>Cycle (s) <span class="value" id="s2sweepCycleVal">7.00</span></label>
-    <input type="range" id="s2sweepCycle" min="1" max="20" step="0.1" value="7.00">
-  </div>
-  <div class="control">
-    <label>Intensité <span class="value" id="s2sweepStrengthVal">1.00</span></label>
-    <input type="range" id="s2sweepStrength" min="0" max="1" step="0.01" value="1.00">
-  </div>
-
-  <div class="group-title">OMBRES BAKÉES</div>
-  <div class="control">
-    <label>Opacité <span class="value" id="s2shadowOpacityVal">0.60</span></label>
-    <input type="range" id="s2shadowOpacity" min="0" max="1" step="0.01" value="0.60">
-  </div>
-  <div class="control">
-    <label>Rotation <span class="value" id="s2shadowRotVal">90</span>°</label>
-    <input type="range" id="s2shadowRot" min="-180" max="180" step="0.5" value="90">
-  </div>
-  <div class="control">
-    <label>Mode de fusion</label>
-    <select id="s2shadowBlend" style="width:100%;background:#1a1f3a;color:#e0e6ff;border:1px solid #2a3050;padding:4px 6px;font-size:11px;font-family:inherit;">
-      <option value="multiply">Multiply</option>
-      <option value="normal" selected>Normal</option>
-      <option value="additive">Additive</option>
-      <option value="subtractive">Subtractive</option>
-    </select>
-  </div>
-  <div class="control">
-    <label>Échelle <span class="value" id="s2shadowScaleVal">1.00</span></label>
-    <input type="range" id="s2shadowScale" min="0.2" max="3" step="0.01" value="1.00">
-  </div>
-  <div class="control">
-    <label>Décalage X <span class="value" id="s2shadowOffXVal">0.00</span></label>
-    <input type="range" id="s2shadowOffX" min="-50" max="50" step="0.1" value="0">
-  </div>
-  <div class="control">
-    <label>Décalage Z <span class="value" id="s2shadowOffZVal">0.00</span></label>
-    <input type="range" id="s2shadowOffZ" min="-50" max="50" step="0.1" value="0">
-  </div>
-
-  <div class="group-title">CAMÉRA ORTHOGRAPHIQUE</div>
-  <div class="control">
-    <label>Zoom <span class="value" id="s2orthoZoomVal">1.70</span></label>
-    <input type="range" id="s2orthoZoom" min="0.2" max="20" step="0.05" value="1.7">
-  </div>
-  <div class="control">
-    <label>Azimut <span class="value" id="s2orthoAzVal">45.0</span>°</label>
-    <input type="range" id="s2orthoAz" min="0" max="360" step="0.5" value="45">
-  </div>
-  <div class="control">
-    <label>Élévation <span class="value" id="s2orthoElVal">30.0</span>°</label>
-    <input type="range" id="s2orthoEl" min="5" max="89" step="0.5" value="30">
-  </div>
-  <div class="control">
-    <label>Cible X <span class="value" id="s2camTxVal">-0.010</span></label>
-    <input type="range" id="s2camTx" min="-5" max="5" step="0.01" value="-0.01">
-  </div>
-  <div class="control">
-    <label>Cible Y <span class="value" id="s2camTyVal">0.000</span></label>
-    <input type="range" id="s2camTy" min="-5" max="5" step="0.01" value="0">
-  </div>
-  <div class="control">
-    <label>Cible Z <span class="value" id="s2camTzVal">0.000</span></label>
-    <input type="range" id="s2camTz" min="-5" max="5" step="0.01" value="0">
-  </div>
-  <div class="btn-row" style="margin-bottom:8px">
-    <div class="btn" id="s2copyCamBtn">COPIER POSITION</div>
-  </div>
-  <p class="save-note" id="s2camCopyNote" style="display:none;color:var(--accent)">Position copiée ✓</p>
-
-  <button class="btn-save" id="s2saveBtn">SAUVEGARDER CONFIG S2</button>
-  <p class="save-note">Config scène 2 sauvegardée dans localStorage.</p>
-</div>
 
 <script type="importmap">
 {
@@ -442,6 +107,40 @@ import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
+
+/* ====================== LOADER ====================== */
+const dotGridEl = document.getElementById('dot-grid');
+const dots = [];
+for (let r = 0; r < 5; r++) {
+  for (let c = 0; c < 5; c++) {
+    const dot = document.createElement('div');
+    dot.className = 'dot';
+    dotGridEl.appendChild(dot);
+    dots.push({ element: dot, dist: Math.abs(r - 2) + Math.abs(c - 2) });
+  }
+}
+function runLoaderRipple() {
+  dots.forEach(d => d.element.classList.remove('ripple'));
+  [{d:0,t:0},{d:1,t:150},{d:2,t:300},{d:3,t:450},{d:4,t:600}].forEach(p => {
+    setTimeout(() => {
+      const wave = dots.filter(d => d.dist === p.d);
+      wave.forEach(d => d.element.classList.add('ripple'));
+      setTimeout(() => wave.forEach(d => d.element.classList.remove('ripple')), 250);
+    }, p.t);
+  });
+}
+function runLoaderErase() {
+  dots.forEach(d => d.element.classList.remove('ripple'));
+  [0,1,2,3,4].forEach(dist => {
+    setTimeout(() => {
+      dots.filter(d => d.dist === dist).forEach(d => d.element.classList.add('erase'));
+    }, dist * 150);
+  });
+}
+let loaderInt;
+const loaderStartTime = performance.now();
+runLoaderRipple();
+loaderInt = setInterval(runLoaderRipple, 1500);
 
 /* ====================== SCENE ====================== */
 const scene = new THREE.Scene();
@@ -545,6 +244,8 @@ const topoMaterial = new THREE.ShaderMaterial({
 
 /* ====================== ALTITUDE ANNOTATIONS ====================== */
 const annotCanvas = document.getElementById('annotCanvas');
+annotCanvas.width = window.innerWidth;
+annotCanvas.height = window.innerHeight;
 const annotCtx = annotCanvas.getContext('2d');
 let altitudePoints = [];
 let showAltitudes = true;
@@ -554,6 +255,15 @@ let altMeshLocalPositions = [];
 
 // Onde mesh local positions
 let ondeMeshLocalPositions = [];
+let etiquetteLocalPositions = [];
+let etiqAnimStartMs = null;
+let etiqCurrentOrder = null;
+let etiqCycleStartS  = 0;
+let etiqBarData      = null;
+
+let etiq2LocalPositions = [];
+let etiq2AnimStartMs  = null;  // horloge unique — même structure que l'étiquette scène 1
+let etiq2BarData      = null;
 
 /* ====================== INTRO ANIMATION ====================== */
 let introPlaying = false;
@@ -567,11 +277,11 @@ const CAM_START_Y = 4.6;    // hauteur de départ (réduite — caméra part de 
 const INTRO_DURATION = 5.2; // secondes (alignée sur la fin de la séquence d'apparition)
 
 // Timing des étapes d'apparition (secondes) — repris du back
-const I_OVERLAY_OUT   = [0.0,  0.8];  // loading overlay fades out
+const I_OVERLAY_OUT   = [0.0,  0.4];  // loading overlay fades out
 const I_TERRAIN       = [0.5,  2.5];  // terrain + points montent
 const I_TOPO_DRAW     = [1.8,  3.8];  // traits se dessinent cam → fond
 const I_BUILDINGS     = [2.4,  4.2];  // maisons fade in
-const I_ANNOT         = [0.0,  2.5];  // labels d'altitude — dès le début
+const I_ANNOT         = [2.8,  4.8];  // labels d'altitude — 1s après les lignes topo
 const I_HOTSPOT       = [5.5,  6.5];  // hotspot
 
 function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
@@ -611,9 +321,8 @@ function updateIntro(elapsed) {
 
   // --- Maisons fade in ---
   const buildT = easeOut(phase(elapsed, ...I_BUILDINGS));
-  const houseAlpha = parseFloat(document.getElementById('houseAlpha').value);
   housesGroup.traverse(c => {
-    if (c.isMesh && c.material) c.material.opacity = buildT * houseAlpha;
+    if (c.isMesh && c.material) c.material.opacity = buildT * 1;
   });
 
   // --- Annotations + hotspot --- (linéaire pour annot pour laisser le stagger respirer)
@@ -623,6 +332,7 @@ function updateIntro(elapsed) {
   // Done — snap to final state
   if (elapsed > INTRO_DURATION) {
     introPlaying = false;
+    if (etiqAnimStartMs === null) etiqAnimStartMs = performance.now();
     camera.position.copy(CAM_FINAL);
     topoUniforms.uReveal.value = 1;
     topoUniforms.uTopoRevealDist.value = 15.0;
@@ -631,13 +341,13 @@ function updateIntro(elapsed) {
     annotReveal = 1;
     hotspotReveal = 1;
     // Pas de reset de parallaxGroup.rotation — le parallax souris continue sans saut
-    const houseAlphaFinal = parseFloat(document.getElementById('houseAlpha').value);
-    housesGroup.traverse(c => { if (c.isMesh && c.material) c.material.opacity = houseAlphaFinal; });
-    showScrollHint();
+    housesGroup.traverse(c => { if (c.isMesh && c.material) c.material.opacity = 1; });
   }
 }
 
 function startIntro() {
+  clearInterval(loaderInt);
+  runLoaderErase();
   introPlaying = true;
   introStart = performance.now();
   // État initial : terrain à plat, lignes topo non dessinées, points invisibles
@@ -655,6 +365,7 @@ function startIntro() {
   const loadingEl = document.getElementById('loading');
   loadingEl.style.display = 'flex';
   loadingEl.style.opacity = '1';
+  loadingEl.style.background = 'transparent';
 }
 
 /* ====================== SCROLL & TRANSITION ====================== */
@@ -683,11 +394,6 @@ function initScrollTargets() {
   scrollInitialized = true;
 }
 
-// Scroll hint
-const scrollHintEl = document.getElementById('scrollHint');
-let scrollHintVisible = false;
-function showScrollHint() { if (scrollHintVisible) return; scrollHintVisible = true; scrollHintEl.classList.add('visible'); }
-function hideScrollHint() { scrollHintEl.classList.remove('visible'); scrollHintVisible = false; }
 
 // Canvas scène 2 — rendu séparé
 const canvas2El = document.getElementById('canvas2');
@@ -732,12 +438,12 @@ function easeInOutQuart(t) { return t < 0.5 ? 8*t*t*t*t : 1 - Math.pow(-2*t+2,4)
 
 // Appliquer la caméra ortho avec une élévation, un offset d'azimut et un multiplicateur de zoom
 function applyOrthoWithEl(elDeg, azOffsetDeg = 0, zoomMul = 1) {
-  const zoom = parseFloat(document.getElementById('s2orthoZoom').value) * zoomMul;
-  const az   = (parseFloat(document.getElementById('s2orthoAz').value) + azOffsetDeg) * Math.PI / 180;
+  const zoom = 1.7 * zoomMul;
+  const az   = (45.0 + azOffsetDeg) * Math.PI / 180;
   const el   = elDeg * Math.PI / 180;
-  const tx   = parseFloat(document.getElementById('s2camTx').value);
-  const ty   = parseFloat(document.getElementById('s2camTy').value);
-  const tz   = parseFloat(document.getElementById('s2camTz').value);
+  const tx   = -0.01;
+  const ty   = 0.0;
+  const tz   = 0.0;
   const tgt  = new THREE.Vector3(tx, ty, tz);
   camera2.position.set(
     tgt.x + Math.cos(el) * Math.sin(az) * ORTHO_DIST,
@@ -792,6 +498,12 @@ function updateScrollAndTransition() {
 
   // Canvas 1 : disparaît lors du fadeOut
   document.getElementById('canvas').style.opacity = 1 - fadeOut;
+  scene2FadeIn = fadeIn;
+  // annotCanvas suit exactement l'opacité de canvas2El : max(1-fadeOut, fadeIn)
+  // → scène 1 reste visible pendant son fadeOut, scène 2 monte en même temps que sa scène 3D
+  annotCanvas.style.opacity = scene2Loaded
+    ? Math.max(1 - fadeOut, fadeIn)
+    : (1 - fadeOut);
 
   // Canvas 2 : apparaît lors du fadeIn
   canvas2El.style.opacity = scene2Loaded ? fadeIn : 0;
@@ -799,7 +511,7 @@ function updateScrollAndTransition() {
 
   // ── Caméra scène 2 : descend + virage azimut + zoom progressif (easing fluide) ──
   if (scene2Loaded) {
-    const elTarget  = parseFloat(document.getElementById('s2orthoEl').value);
+    const elTarget  = 30.0;
     // Easing in-out cubic pour un mouvement plus organique
     const eFade = easeInOutQuart(fadeIn);
     const elCurrent  = S2_EL_START + (elTarget - S2_EL_START) * eFade;
@@ -814,14 +526,30 @@ function updateScrollAndTransition() {
   const nowScene2 = fadeIn >= 0.5 && scene2Loaded;
   if (nowScene2 !== scene2Active) {
     scene2Active = nowScene2;
-    document.getElementById('configHint').textContent =
-      scene2Active ? 'SCÈNE 2 — CONFIGURATEUR [ESC]' : 'SCÈNE 1 — CONFIGURATEUR [ESC]';
+    if (scene2Active) {
+      if (scanItems2.length && scanAnimStartMs2 === null) {
+        scan2Order    = etiqNewShuffle(scanItems2.length); // shuffle complet dès le départ
+        scan2OrderIdx = 0;
+        activeScanIdx2 = scan2Order[0];
+        lastScanIdx2 = null;
+        scanAnimStartMs2 = performance.now();
+        etiq2LocalPositions = [scanItems2[activeScanIdx2].etiqLocalPos];
+      }
+    } else {
+      scanAnimStartMs2  = null;
+      activeScanIdx2    = null;
+      etiq2AnimStartMs  = null;
+      etiq2BarData      = null;
+      scan2Order        = null;
+      scan2OrderIdx     = 0;
+      scanItems2.forEach(item => { item.uniforms.uRadius.value = 0; });
+    }
   }
 
-  if (s > 0.02) hideScrollHint();
 }
 
 let scene2Active = false;
+let scene2FadeIn  = 0;   // valeur brute de fadeIn (0→1) pour l'opacité de l'étiquette scène 2
 
 function switchToScene1() {}  // retour géré par scroll up
 function switchToScene2() {}  // géré par updateScrollAndTransition
@@ -854,12 +582,12 @@ const camera2 = new THREE.OrthographicCamera(_of.l, _of.r, _of.t, _of.b, 0.01, 1
 
 // Positionner caméra isométrique par défaut (az=45°, el=35°)
 function updateOrthoCamera() {
-  const zoom = parseFloat(document.getElementById('s2orthoZoom').value);
-  const az   = parseFloat(document.getElementById('s2orthoAz').value)  * Math.PI / 180;
-  const el   = parseFloat(document.getElementById('s2orthoEl').value)  * Math.PI / 180;
-  const tx   = parseFloat(document.getElementById('s2camTx').value);
-  const ty   = parseFloat(document.getElementById('s2camTy').value);
-  const tz   = parseFloat(document.getElementById('s2camTz').value);
+  const zoom = 1.7;
+  const az   = 45.0 * Math.PI / 180;
+  const el   = 30.0 * Math.PI / 180;
+  const tx   = -0.01;
+  const ty   = 0.0;
+  const tz   = 0.0;
   const target2 = new THREE.Vector3(tx, ty, tz);
 
   // Direction depuis angles sphériques
@@ -998,7 +726,7 @@ function regenerateGrid2() {
   if (!terrainCollisionMesh2) return;
   if (pointsObject2) parallaxGroup2.remove(pointsObject2);
 
-  const density = parseInt(document.getElementById('s2density').value);
+  const density = 249;
   const bbox = new THREE.Box3().setFromObject(terrainCollisionMesh2);
   const size = bbox.getSize(new THREE.Vector3());
   const nx = density, nz = Math.round(density * (size.z / size.x));
@@ -1119,6 +847,196 @@ function updateAltWorldPositions2() {
 }
 
 
+function buildScanItem(mesh) {
+  mesh.updateMatrixWorld(true);
+  parallaxGroup2.updateMatrixWorld(true);
+
+  const DENSITY_TARGET = 200;
+  const POINT_SIZE = 14;
+
+  // BBox world du mesh
+  const scanBboxWorld = new THREE.Box3().setFromObject(mesh);
+  const bMin = scanBboxWorld.min, bMax = scanBboxWorld.max;
+  const bSize = scanBboxWorld.getSize(new THREE.Vector3());
+
+  // STEP commun à tous les meshes → densité visuelle constante quelle que soit la taille du mesh
+  // scan2RefStep est calculé sur le plus grand mesh avant le premier buildScanItem()
+  const positions = [], normals = [], randoms = [];
+  const STEP = scan2RefStep !== null
+    ? scan2RefStep
+    : Math.max(bSize.x, bSize.y, bSize.z) / DENSITY_TARGET;
+  const NX = Math.max(2, Math.round(bSize.x / STEP));
+  const NY = Math.max(2, Math.round(bSize.y / STEP));
+  const NZ = Math.max(2, Math.round(bSize.z / STEP));
+
+  // Volume bâtiment
+  for (let ix = 0; ix <= NX; ix++) {
+    for (let iy = 0; iy <= NY; iy++) {
+      for (let iz = 0; iz <= NZ; iz++) {
+        const jx = (Math.random() - 0.5) * STEP * 0.9;
+        const jy = (Math.random() - 0.5) * STEP * 0.9;
+        const jz = (Math.random() - 0.5) * STEP * 0.9;
+        const x = bMin.x + (ix / NX) * bSize.x + jx;
+        const y = bMin.y + (iy / NY) * bSize.y + jy;
+        const z = bMin.z + (iz / NZ) * bSize.z + jz;
+        positions.push(x, y, z);
+        normals.push(0, 1, 0);
+        randoms.push(Math.random());
+      }
+    }
+  }
+
+  // Halo sol — couche élargie sous le bâtiment (onde qui "prend du terrain")
+  const haloDepth  = bSize.y * 0.10;
+  const haloSpread = 0.30;
+  const hxMin = bMin.x - bSize.x * haloSpread;
+  const hxMax = bMax.x + bSize.x * haloSpread;
+  const hzMin = bMin.z - bSize.z * haloSpread;
+  const hzMax = bMax.z + bSize.z * haloSpread;
+  const haloSizeX = hxMax - hxMin, haloSizeZ = hzMax - hzMin;
+  const STEP_H = STEP * 1.5;
+  const HNX = Math.max(2, Math.round(haloSizeX / STEP_H));
+  const HNZ = Math.max(2, Math.round(haloSizeZ / STEP_H));
+  const HNY = Math.max(2, Math.round(haloDepth  / STEP_H));
+  for (let ix = 0; ix <= HNX; ix++) {
+    for (let iy = 0; iy <= HNY; iy++) {
+      for (let iz = 0; iz <= HNZ; iz++) {
+        const jx = (Math.random() - 0.5) * STEP * 0.9;
+        const jy = (Math.random() - 0.5) * STEP * 0.9;
+        const jz = (Math.random() - 0.5) * STEP * 0.9;
+        const x  = hxMin + (ix / HNX) * haloSizeX + jx;
+        const y  = bMin.y - haloDepth + (iy / HNY) * haloDepth + jy;
+        const z  = hzMin + (iz / HNZ) * haloSizeZ + jz;
+        positions.push(x, y, z);
+        normals.push(0, 1, 0);
+        randoms.push(Math.random());
+      }
+    }
+  }
+
+  // Convertir en espace local parallaxGroup2
+  const localPos = [], localNorm = [];
+  const tmpV = new THREE.Vector3();
+  for (let i = 0; i < positions.length; i += 3) {
+    tmpV.set(positions[i], positions[i+1], positions[i+2]);
+    parallaxGroup2.worldToLocal(tmpV);
+    localPos.push(tmpV.x, tmpV.y, tmpV.z);
+    localNorm.push(0, 1, 0);
+  }
+
+  // BBox locale
+  const scanBbox = new THREE.Box3();
+  const bMinL = new THREE.Vector3().copy(bMin); parallaxGroup2.worldToLocal(bMinL);
+  const bMaxL = new THREE.Vector3().copy(bMax); parallaxGroup2.worldToLocal(bMaxL);
+  scanBbox.expandByPoint(bMinL); scanBbox.expandByPoint(bMaxL);
+  const haloDepthL = Math.abs(bMaxL.y - bMinL.y) * 0.12;
+  scanBbox.min.y = Math.min(scanBbox.min.y, scanBbox.min.y - haloDepthL);
+  const scanCenter = scanBbox.getCenter(new THREE.Vector3());
+
+  const scanGeom = new THREE.BufferGeometry();
+  scanGeom.setAttribute('position', new THREE.Float32BufferAttribute(localPos, 3));
+  scanGeom.setAttribute('normal',   new THREE.Float32BufferAttribute(localNorm, 3));
+  scanGeom.setAttribute('aRandom',  new THREE.Float32BufferAttribute(randoms, 1));
+
+  const uniforms = {
+    uTime:         { value: 0 },
+    uRadius:       { value: 0.0 },
+    uMaxRadius:    { value: 1.0 },
+    uCenter:       { value: new THREE.Vector3() },
+    uBandWidth:    { value: 0.15 },
+    uPointSize:    { value: POINT_SIZE },
+    uBaseAlpha:    { value: 0.0 },
+    uBaseColor:    { value: new THREE.Color('#00FCD9') },
+    uScanColor:    { value: new THREE.Color('#00FCD9') },
+    uScreenHeight: { value: window.innerHeight },
+  };
+
+  // Origine de l'onde = centre de la face haute du mesh (espace local)
+  {
+    const scanTopCenter = new THREE.Vector3(scanCenter.x, scanBbox.max.y, scanCenter.z);
+    let topMaxR = 0;
+    const tcX = scanTopCenter.x, tcY = scanTopCenter.y, tcZ = scanTopCenter.z;
+    for (let i = 0; i < localPos.length; i += 3) {
+      const dx = localPos[i]-tcX, dy = localPos[i+1]-tcY, dz = localPos[i+2]-tcZ;
+      const d = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      if (d > topMaxR) topMaxR = d;
+    }
+    uniforms.uCenter.value.copy(scanTopCenter);
+    uniforms.uMaxRadius.value = topMaxR;
+  }
+
+  const scanMat = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: `
+      attribute float aRandom;
+      uniform float uTime, uRadius;
+      uniform vec3 uCenter;
+      uniform float uBandWidth;
+      uniform float uPointSize, uBaseAlpha;
+      uniform float uScreenHeight;
+      varying float vAlpha, vIntensity;
+      void main() {
+        vec3 p = position;
+
+        // ── Wiggle : vibration rapide, fréquence unique par particule ──
+        // pFloat bougé pour l'affichage ; seuil calculé sur position ORIGINALE p
+        // → les particules vibrent mais ne scintillent pas au passage du front
+        vec3 pFloat = p;
+        float wSpeed = 1.2 + 0.8 * aRandom;           // 1.2–2.0 Hz par particule
+        float w = uTime * wSpeed + aRandom * 6.28318;
+        pFloat.x += 0.008 * sin(w);
+        pFloat.y += 0.008 * sin(w + 2.094);           // déphasé +2π/3
+
+        // ── Onde sphérique depuis le centre de la face haute ──
+        // Rayon 0 = un point au toit → s'étend vers les bords puis vers le bas
+        float dist = distance(p, uCenter);
+        float d = uRadius - dist;   // >0 si dans l'onde (dist < uRadius)
+        float filled = smoothstep(-uBandWidth, uBandWidth, d);
+        float crest  = exp(-d * d / (uBandWidth * uBandWidth * 0.5));
+        vIntensity = clamp(filled + crest * 0.6, 0.0, 1.0);
+
+        float flicker = 0.9 + 0.1 * sin(uTime * 2.0 + aRandom * 6.28318);
+        // Fade global : quand uRadius = 0 toutes les particules sont invisibles,
+        // y compris celles du centre qui auraient sinon filled=0.5 et crest=1
+        float globalFade = smoothstep(0.0, uBandWidth, uRadius);
+        vAlpha = clamp((uBaseAlpha + vIntensity) * flicker * globalFade, 0.0, 1.0);
+
+        // Rendu à la position flottante
+        vec4 mvPos = modelViewMatrix * vec4(pFloat, 1.0);
+        gl_PointSize = uPointSize * (uScreenHeight / -mvPos.z) * 0.003;
+        gl_Position = projectionMatrix * mvPos;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uBaseColor, uScanColor;
+      varying float vAlpha, vIntensity;
+      void main() {
+        if (vAlpha < 0.01) discard;
+        vec2 uv = gl_PointCoord - vec2(0.5);
+        float r = length(uv);
+        if (r > 0.5) discard;
+        // Dégradé sphérique
+        float light = pow(1.0 - r * 2.0, 1.5);
+        vec3 col = mix(uBaseColor, uScanColor, vIntensity * vIntensity) * (0.8 + light * 0.6);
+        float alpha = vAlpha * smoothstep(0.5, 0.3, r);
+        gl_FragColor = vec4(col, alpha);
+      }
+    `,
+    transparent: true, depthWrite: false
+  });
+
+  const points = new THREE.Points(scanGeom, scanMat);
+  points.frustumCulled = false;
+  parallaxGroup2.add(points);
+
+  // Étiquette anchor : sommet de la bounding box en espace local parallaxGroup2
+  const topY = Math.max(bMinL.y, bMaxL.y);
+  const anchorLocal = new THREE.Vector3((bMinL.x + bMaxL.x) / 2, topY, (bMinL.z + bMaxL.z) / 2);
+  const lp = anchorLocal;
+
+  return { name: mesh.name, mesh, points, mat: scanMat, uniforms, etiqLocalPos: { localPos: lp, name: mesh.name } };
+}
+
 async function loadScene2() {
   if (scene2Loading || scene2Loaded) return;
   scene2Loading = true;
@@ -1156,133 +1074,46 @@ async function loadScene2() {
   });
   housesGroup2.add(mData2.scene);
 
-  // ── Scan bâtiment scan1 ──
-  mData2.scene.traverse(node => {
-    if (!scan1Mesh && node.isMesh && node.name.toLowerCase().startsWith('scan1'))
-      scan1Mesh = node;
-  });
-  if (scan1Mesh) {
-    scan1Mesh.updateMatrixWorld(true);
+  // ── Détecter et construire tous les meshes scan1/2/3 ──
+  parallaxGroup2.updateMatrixWorld(true);
+  const allNames2 = [];
+  mData2.scene.traverse(node => { if (node.name) allNames2.push(node.name); });
+  console.log('[scan2] mesh names in maisons2:', allNames2);
+  const scanOrder = ['scan1', 'scan2', 'scan3'];
 
-    // BBox world du mesh
-    const scanBboxWorld = new THREE.Box3().setFromObject(scan1Mesh);
-    const bMin = scanBboxWorld.min, bMax = scanBboxWorld.max;
-    const bSize = scanBboxWorld.getSize(new THREE.Vector3());
-
-    // Remplissage volumique — grille + jitter pour un nuage naturel
-    const positions = [], normals = [], randoms = [], isEdgePt = [];
-    const DENSITY = 50; // subdivisions par axe
-    for (let ix = 0; ix <= DENSITY; ix++) {
-      for (let iy = 0; iy <= DENSITY; iy++) {
-        for (let iz = 0; iz <= DENSITY; iz++) {
-          const jx = (Math.random() - 0.5) * (bSize.x / DENSITY) * 0.9;
-          const jy = (Math.random() - 0.5) * (bSize.y / DENSITY) * 0.9;
-          const jz = (Math.random() - 0.5) * (bSize.z / DENSITY) * 0.9;
-          const x = bMin.x + (ix / DENSITY) * bSize.x + jx;
-          const y = bMin.y + (iy / DENSITY) * bSize.y + jy;
-          const z = bMin.z + (iz / DENSITY) * bSize.z + jz;
-          positions.push(x, y, z);
-          normals.push(0, 1, 0);
-          randoms.push(Math.random());
-          isEdgePt.push(0.0);
+  // ── Calcul du STEP de référence sur le PLUS GRAND mesh scan ──
+  // → tous les meshes partagent le même espacement world-space,
+  //   donc un petit mesh reçoit naturellement moins de particules qu'un grand
+  {
+    let refMaxSide = 0;
+    scanOrder.forEach(sn => {
+      mData2.scene.traverse(node => {
+        if (node.isMesh && node.name.toLowerCase().startsWith(sn)) {
+          node.updateMatrixWorld(true);
+          const sz = new THREE.Box3().setFromObject(node).getSize(new THREE.Vector3());
+          refMaxSide = Math.max(refMaxSide, sz.x, sz.y, sz.z);
         }
-      }
-    }
-    // Convertir en espace local parallaxGroup2 pour suivre le parallax
-    const localPos = [], localNorm = [];
-    const invMat = new THREE.Matrix4().copy(parallaxGroup2.matrixWorld).invert();
-    const tmpV = new THREE.Vector3();
-    for (let i = 0; i < positions.length; i += 3) {
-      tmpV.set(positions[i], positions[i+1], positions[i+2]);
-      parallaxGroup2.worldToLocal(tmpV);
-      localPos.push(tmpV.x, tmpV.y, tmpV.z);
-      localNorm.push(0, 1, 0); // normale fictive
-    }
-    // BBox locale pour l'origine de l'onde
-    const scanBbox = new THREE.Box3();
-    scanBboxWorld.min.clone().applyMatrix4(invMat); // approx
-    const bMinL = new THREE.Vector3().copy(bMin); parallaxGroup2.worldToLocal(bMinL);
-    const bMaxL = new THREE.Vector3().copy(bMax); parallaxGroup2.worldToLocal(bMaxL);
-    scanBbox.expandByPoint(bMinL); scanBbox.expandByPoint(bMaxL);
-    const scanCenter = scanBbox.getCenter(new THREE.Vector3());
-
-    const scanGeom = new THREE.BufferGeometry();
-    scanGeom.setAttribute('position', new THREE.Float32BufferAttribute(localPos, 3));
-    scanGeom.setAttribute('normal',   new THREE.Float32BufferAttribute(localNorm, 3));
-    scanGeom.setAttribute('aRandom',  new THREE.Float32BufferAttribute(randoms, 1));
-
-    scan1Uniforms = {
-      uTime:         { value: 0 },
-      uScanY:        { value: 0.0 },   // position Y de la bande
-      uScanDir:      { value: 1.0 },   // +1 descente, -1 montée
-      uBandWidth:    { value: 0.08 },  // largeur crête
-      uTrailLen:     { value: 0.06 },  // longueur traîne
-      uPointSize:    { value: 23.0 },
-      uBaseAlpha:    { value: 0.0 },
-      uBaseColor:    { value: new THREE.Color('#00ffee') },
-      uScanColor:    { value: new THREE.Color('#00ffee') },
-      uScreenHeight: { value: window.innerHeight },
-      uYMin:         { value: scanBbox.min.y },
-      uYMax:         { value: scanBbox.max.y },
-    };
-
-    const scanMat = new THREE.ShaderMaterial({
-      uniforms: scan1Uniforms,
-      vertexShader: `
-        attribute float aRandom;
-        uniform float uTime, uScanY, uScanDir;
-        uniform float uBandWidth, uTrailLen;
-        uniform float uPointSize, uBaseAlpha;
-        uniform float uScreenHeight, uYMin, uYMax;
-        varying float vAlpha, vIntensity;
-        void main() {
-          vec3 p = position;
-
-          // Distance signée à la bande (positif = derrière la bande dans le sens du scan)
-          float signedD = (uScanY - p.y) * uScanDir;
-
-          // Crête lumineuse nette
-          float crest = exp(-signedD * signedD / (uBandWidth * uBandWidth * 0.5));
-
-          // Traîne exponentielle derrière la bande
-          float trail = 0.0;
-          if (signedD > 0.0) {
-            trail = exp(-signedD / max(0.001, uTrailLen)) * 0.6;
-          }
-
-          vIntensity = clamp(crest + trail, 0.0, 1.0);
-
-          // Fond ambiant + flottement lent
-          float flicker = 0.8 + 0.2 * sin(uTime * 1.5 + aRandom * 6.28);
-          vAlpha = clamp(uBaseAlpha * flicker + vIntensity, 0.0, 1.0);
-
-          vec4 mvPos = modelViewMatrix * vec4(p, 1.0);
-          gl_PointSize = uPointSize * (uScreenHeight / -mvPos.z) * 0.003;
-          gl_Position = projectionMatrix * mvPos;
-        }
-      `,
-      fragmentShader: `
-        uniform vec3 uBaseColor, uScanColor;
-        varying float vAlpha, vIntensity;
-        void main() {
-          if (vAlpha < 0.01) discard;
-          vec2 uv = gl_PointCoord - vec2(0.5);
-          float r = length(uv);
-          if (r > 0.5) discard;
-          // Dégradé sphérique
-          float light = pow(1.0 - r * 2.0, 1.5);
-          vec3 col = mix(uBaseColor, uScanColor, vIntensity * vIntensity) * (0.6 + light * 0.5);
-          float alpha = vAlpha * smoothstep(0.5, 0.3, r);
-          gl_FragColor = vec4(col, alpha);
-        }
-      `,
-      transparent: true, depthWrite: false
+      });
     });
-    scan1Points = new THREE.Points(scanGeom, scanMat);
-    scan1Points.frustumCulled = false;
-    scan1Mat_ref = scanMat; // référence pour rebuild densité
-    parallaxGroup2.add(scan1Points);
+    const dtRef = 200;
+    scan2RefStep = refMaxSide > 0 ? refMaxSide / dtRef : null;
+    console.log('[scan2] refMaxSide:', refMaxSide, 'scan2RefStep:', scan2RefStep);
   }
+
+  scanOrder.forEach(scanName => {
+    let found = null;
+    mData2.scene.traverse(node => {
+      if (!found && node.isMesh && node.name.toLowerCase().startsWith(scanName))
+        found = node;
+    });
+    if (found) {
+      found.updateMatrixWorld(true);
+      const item = buildScanItem(found);
+      scanItems2.push(item);
+      console.log('[scan2] built item:', item.name);
+    }
+  });
+  if (!scanItems2.length) console.warn('[scan2] no scan meshes found');
 
   // Plan d'ombres baké — plaqué juste au-dessus du terrain (pour éviter z-fighting)
   // Mode multiply : assombrit naturellement le terrain en dessous tout en laissant les points visibles
@@ -1297,7 +1128,7 @@ async function loadScene2() {
   const shadowMat = new THREE.MeshBasicMaterial({
     map: shadowTex,
     transparent: true,
-    opacity: parseFloat(document.getElementById('s2shadowOpacity')?.value || 0.6),
+    opacity: 0.6,
     blending: THREE.NormalBlending,
     depthWrite: false,
     fog: true
@@ -1323,16 +1154,22 @@ async function loadScene2() {
   scene2Loading = false;
 }
 
-let showAltitudes2 = false;
 let scene2ShadowMesh = null;
-let scan1Points = null, scan1Uniforms = null, scan1Mat_ref = null, scan1Mesh = null, scan1Speed = 3.0;
+let scanItems2 = [];        // [{name, mesh, points, mat, uniforms, etiqLocalPos}]
+let activeScanIdx2 = null;  // index dans scanItems2 du scan actif
+let lastScanIdx2   = null;  // dernier index animé (évite de démarrer le cycle suivant par lui)
+let scan2Order     = null;  // ordre shufflé complet pour le cycle en cours [ex: 2,0,1]
+let scan2OrderIdx  = 0;     // position courante dans scan2Order
+let scanAnimStartMs2 = null;
+let scan2Speed = 3.0;
+let scan2RefStep = null;    // espacement commun à tous les meshes (dérivé du plus grand)
 
 function applyShadowTransform2() {
   if (!scene2ShadowMesh) return;
-  const rot = parseFloat(document.getElementById('s2shadowRot').value) * Math.PI / 180;
-  const scale = parseFloat(document.getElementById('s2shadowScale').value);
-  const offX = parseFloat(document.getElementById('s2shadowOffX').value);
-  const offZ = parseFloat(document.getElementById('s2shadowOffZ').value);
+  const rot = 90 * Math.PI / 180;
+  const scale = 1.0;
+  const offX = 0.0;
+  const offZ = 0.0;
   scene2ShadowMesh.rotation.set(-Math.PI / 2, 0, rot);
   scene2ShadowMesh.scale.set(scale, scale, 1);
   const c = scene2ShadowMesh.userData.baseCenter;
@@ -1341,14 +1178,7 @@ function applyShadowTransform2() {
 
 function applyShadowBlend2() {
   if (!scene2ShadowMesh) return;
-  const mode = document.getElementById('s2shadowBlend').value;
-  const map = {
-    multiply: THREE.MultiplyBlending,
-    normal: THREE.NormalBlending,
-    additive: THREE.AdditiveBlending,
-    subtractive: THREE.SubtractiveBlending
-  };
-  scene2ShadowMesh.material.blending = map[mode] || THREE.MultiplyBlending;
+  scene2ShadowMesh.material.blending = THREE.NormalBlending;
   scene2ShadowMesh.material.needsUpdate = true;
 }
 function drawAnnotations2(time) { /* désactivé scène 2 */ }
@@ -1395,9 +1225,7 @@ function updateHotspotWorldPos() {
   hotspotScreenPos = projectToScreen(hotspotWorldPos);
 }
 
-function drawHotspot(time) {
-  // Hotspot supprimé — scroll-driven zoom à la place
-}
+function drawHotspot(time) {}
 
 // startSceneTransition / updateTransition remplacés par le système scroll
 
@@ -1463,6 +1291,21 @@ function extractAltMeshes(terrainScene) {
   altMeshLocalPositions = found.map(f => f.localPos);
 }
 
+function extractEtiquetteMeshes(gltfScene) {
+  gltfScene.traverse(node => {
+    if (/^etiquette\d*$/i.test(node.name)) {
+      node.visible = false;
+      if (node.isMesh && node.material) { node.material = node.material.clone(); node.material.visible = false; }
+      const wp = new THREE.Vector3();
+      node.getWorldPosition(wp);
+      const lp = parallaxGroup.worldToLocal(wp.clone());
+      if (etiquetteLocalPositions.every(e => e.name !== node.name))
+        etiquetteLocalPositions.push({ localPos: lp, name: node.name });
+    }
+  });
+  etiquetteLocalPositions.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+}
+
 function pickAltitudePoints() {
   if (altMeshLocalPositions.length === 0) return;
 
@@ -1523,14 +1366,14 @@ function projectToScreen(worldPos) {
 function drawAnnotations(time) {
   if (!showAltitudes || altitudePoints.length === 0) { drawHotspot(time); return; }
 
-  const color = document.getElementById('altColor').value;
-  const fontSize = parseInt(document.getElementById('altFontSize').value);
-  const speed = parseFloat(document.getElementById('altSpeed').value);
+  const color = '#5B7BFF';
+  const fontSize = 11;
+  const speed = 0.30;
 
   // Délai de départ échelonné : chaque point démarre à un moment différent
-  const STAGGER_DELAY = 0.18; // secondes entre chaque point
-  const FADE_DUR = 0.55;      // durée du fade-in en secondes (en unités annotReveal)
-  const LINE_DUR = 0.4;       // durée de croissance de la ligne
+  const STAGGER_DELAY = 0.18;
+  const FADE_DUR = 0.55;
+  const LINE_DUR = 0.4;
 
   altitudePoints.forEach(pt => {
     const sc = projectToScreen(pt.worldPos);
@@ -1597,31 +1440,330 @@ function drawAnnotations(time) {
   drawHotspot(time);
 }
 
+// ===== ÉTIQUETTES ANIMÉES =====
+const ETIQ_CARD_PATH = new Path2D('M31.44 0H2.78C1.24 0 0 1.24 0 2.78V32.90C0 34.43 1.24 35.67 2.78 35.67H18.61C19.46 35.67 20.26 35.29 20.78 34.62C21.31 33.95 22.11 33.56 22.96 33.56H31.44C32.97 33.56 34.22 32.32 34.22 30.78V2.78C34.22 1.24 32.97 0 31.44 0Z');
+const ETIQ_DOT_X = [10.0, 13.56, 17.11, 20.66, 24.20];
+const ETIQ_DOT_Y = [10.74, 14.26, 17.78, 21.31, 24.83];
+const ETIQ_DOT_R = 1.26;
+const ETIQ_SCALE = 1.3;
+const ETIQ_INTRO_DUR      = 0.55; // whole card slides up + fades in
+const ETIQ_INTRO_DOTS_DUR = 0.6;  // dots ripple from center + pause before sweep
+const ETIQ_SWEEP_DUR      = 3.0;  // 2 laps
+const ETIQ_SWEEP_FADE_DUR  = 0.3;   // gap after sweep, trail clears
+const ETIQ_CHART_IN_DUR    = 0.5;   // bars grow left-to-right
+const ETIQ_CHART_HOLD_DUR  = 0.6;   // bars fully visible
+const ETIQ_CHART_OUT_DUR   = 0.5;   // bars shrink right-to-left
+const ETIQ_CHECK_DUR      = 0.6;
+const ETIQ_PAUSE_DUR      = 0.4;
+const ETIQ_OUTRO_DUR      = 0.9;
+const ETIQ_CHECK = [[0,2],[1,3],[2,2],[3,1],[4,0]];
+const ETIQ_PERIMETER = [
+  [0,0],[1,0],[2,0],[3,0],[4,0],
+  [4,1],[4,2],[4,3],[4,4],
+  [3,4],[2,4],[1,4],[0,4],
+  [0,3],[0,2],[0,1]
+];
+const ETIQ_PERI_LEN = 16;
+const ETIQ_LAPS = 2;
+const ETIQ2_LAPS = 2;
+const ETIQ2_SWEEP_DUR = ETIQ_SWEEP_DUR * ETIQ2_LAPS / ETIQ_LAPS; // 4.5s — même vitesse, 1 tour de plus
+
+const ETIQ_Y_OFFSETS  = [-60, -60, 20]; // vertical screen-px offset per mesh (etiquette1/2/3)
+const ETIQ2_Y_OFFSET  = -65;            // marge écran au-dessus du sommet de scan1 (scene 2)
+
+function easeOutExpo(t)    { return t >= 1 ? 1 : 1 - Math.pow(2, -10 * t); }
+function easeInExpo(t)     { return t <= 0 ? 0 : Math.pow(2, 10 * t - 10); }
+function easeInOutExpo(t)  { return t <= 0 ? 0 : t >= 1 ? 1 : t < 0.5 ? Math.pow(2, 20*t-10)/2 : (2-Math.pow(2,-20*t+10))/2; }
+function easeInOutQuad(t)  { return t < 0.5 ? 2*t*t : 1-(2-2*t)*(2-2*t)/2; }
+function easeOutCubic(t)   { return 1 - Math.pow(1 - t, 3); }
+
+function etiqNewBarHeights(n) {
+  return Array.from({length: n}, () => Array.from({length: 5}, () => 1 + Math.floor(Math.random() * 5)));
+}
+
+function etiqNewShuffle(n, avoidFirst = -1) {
+  const arr = Array.from({length: n}, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  // Prevent the new cycle from starting with the same card as the previous one ended with
+  if (avoidFirst >= 0 && arr[0] === avoidFirst && n > 1) {
+    const swapIdx = 1 + Math.floor(Math.random() * (n - 1));
+    [arr[0], arr[swapIdx]] = [arr[swapIdx], arr[0]];
+  }
+  return arr;
+}
+
+function drawEtiquettes(t) {
+  const n = etiquetteLocalPositions.length;
+  if (!n || etiqAnimStartMs === null) return;
+  const globalElapsed = (performance.now() - etiqAnimStartMs) / 1000;
+
+  const T1  = ETIQ_INTRO_DUR;
+  const T2  = T1 + ETIQ_INTRO_DOTS_DUR;
+  const T3  = T2  + ETIQ_SWEEP_DUR;
+  const T3F = T3  + ETIQ_SWEEP_FADE_DUR;
+  const T3A = T3F + ETIQ_CHART_IN_DUR;
+  const T3B = T3A + ETIQ_CHART_HOLD_DUR;
+  const T3C = T3B + ETIQ_CHART_OUT_DUR;
+  const T4  = T3C + ETIQ_CHECK_DUR;
+  const T5  = T4 + ETIQ_PAUSE_DUR;
+  const T6  = T5 + ETIQ_OUTRO_DUR;
+  const cycleDur = n * T6;
+
+  // Init + cycle advance with new random order each round
+  if (etiqCurrentOrder === null) {
+    etiqCurrentOrder = etiqNewShuffle(n);
+    etiqBarData = etiqNewBarHeights(n);
+    etiqCycleStartS = 0;
+  }
+  while (globalElapsed - etiqCycleStartS >= cycleDur) {
+    etiqCycleStartS += cycleDur;
+    const lastCard = etiqCurrentOrder[etiqCurrentOrder.length - 1];
+    etiqCurrentOrder = etiqNewShuffle(n, lastCard);
+    etiqBarData = etiqNewBarHeights(n);
+  }
+  const localElapsed = globalElapsed - etiqCycleStartS;
+
+  etiqCurrentOrder.forEach((originalIdx, slotIdx) => {
+    const etiq = etiquetteLocalPositions[originalIdx];
+    const worldPos = etiq.localPos.clone();
+    parallaxGroup.localToWorld(worldPos);
+    const sc = projectToScreen(worldPos);
+    if (sc.behind) return;
+
+    const elapsed = localElapsed - slotIdx * T6;
+    if (elapsed < 0 || elapsed > T6) return;
+
+    // Intro: card glisse doucement depuis +16px, fondu easeOutCubic
+    const introP      = easeOutCubic(Math.min(elapsed / ETIQ_INTRO_DUR, 1));
+    const introOffset = (1 - introP) * 16;
+
+    // Outro: fondu + légère descente — easeInOutQuad
+    const outroRaw    = elapsed > T5 ? Math.min((elapsed - T5) / ETIQ_OUTRO_DUR, 1) : 0;
+    const outroP      = easeInOutQuad(outroRaw);
+    const outroOffset = outroP * 6;
+
+    const s  = ETIQ_SCALE;
+    const cx = sc.x - (34.22 * s) / 2;
+    const yOff = ETIQ_Y_OFFSETS[originalIdx] ?? -60;
+    const cy = sc.y - (35.67 * s) / 2 + yOff + introOffset + outroOffset;
+
+    annotCtx.save();
+    annotCtx.globalAlpha = introP * (1 - outroP);
+    annotCtx.translate(cx, cy);
+    annotCtx.scale(s, s);
+
+    annotCtx.fillStyle = '#00FCD9';
+    annotCtx.fill(ETIQ_CARD_PATH);
+
+    if (elapsed >= T1) {
+      const rippleE   = elapsed - T1;
+      const maxDist   = Math.sqrt(8);
+      const inRipple  = elapsed < T2;
+      const inSweep     = elapsed >= T2  && elapsed < T3;
+      const inSweepFade = elapsed >= T3  && elapsed < T3F;
+      const inChartIn   = elapsed >= T3F && elapsed < T3A;
+      const inChartHld  = elapsed >= T3A && elapsed < T3B;
+      const inChartOut  = elapsed >= T3B && elapsed < T3C;
+      const inChart     = inChartIn || inChartHld || inChartOut;
+      const inCheck     = elapsed >= T3C;
+      const sweepHead = inSweep      ? ((elapsed - T2) / ETIQ_SWEEP_DUR) * (ETIQ_LAPS * ETIQ_PERI_LEN)
+                      : inSweepFade  ? ETIQ_LAPS * ETIQ_PERI_LEN
+                      : -1;
+      const bandSize  = inSweep      ? Math.min(5, 1 + Math.floor(Math.min(sweepHead, 4)))
+                      : inSweepFade  ? Math.max(0, Math.ceil(5 * (1 - (elapsed - T3) / ETIQ_SWEEP_FADE_DUR)))
+                      : 5;
+      const checkProgress = inCheck ? Math.min((elapsed - T3C) / ETIQ_CHECK_DUR, 1) : 0;
+      const easedCheck    = easeInOutQuad(checkProgress);
+
+      for (let row = 0; row < 5; row++) {
+        for (let col = 0; col < 5; col++) {
+          const dist     = Math.sqrt((col - 2) ** 2 + (row - 2) ** 2);
+          const dotDelay = inRipple ? (dist / maxDist) * (ETIQ_INTRO_DOTS_DUR * 0.3) : 0;
+          const dotA     = inRipple ? Math.min(Math.max((rippleE - dotDelay) / 0.2, 0), 1) : 1;
+          if (dotA <= 0) continue;
+
+          let dr = 255, dg = 255, db = 255, da = dotA;
+
+          if ((inSweep || inSweepFade) && sweepHead >= 0 && bandSize > 0) {
+            const pi = ETIQ_PERIMETER.findIndex(([pc, pr]) => pc === col && pr === row);
+            if (pi !== -1) {
+              const head   = sweepHead % ETIQ_PERI_LEN;
+              const behind = (head - pi + ETIQ_PERI_LEN) % ETIQ_PERI_LEN;
+              if (behind < bandSize) { dr = 0; dg = 29; db = 252; da = 1; }
+            }
+          } else if (inChart) {
+            const barH = etiqBarData ? etiqBarData[slotIdx][col] : 3;
+            let dotsLit;
+            if (inChartIn) {
+              const e = elapsed - T3F;
+              const colP = easeOutCubic(Math.max(0, Math.min((e - col * 0.06) / 0.26, 1)));
+              dotsLit = Math.floor(colP * barH);
+            } else if (inChartHld) {
+              dotsLit = barH;
+            } else {
+              const e = elapsed - T3B;
+              const p = easeInOutQuad(e / ETIQ_CHART_OUT_DUR);
+              dotsLit = Math.max(0, Math.round((1 - p) * barH));
+            }
+            if (4 - row < dotsLit) { dr = 0; dg = 29; db = 252; }
+          } else if (inCheck) {
+            const ci = ETIQ_CHECK.findIndex(([cc, cr]) => cc === col && cr === row);
+            if (ci !== -1 && easedCheck > ci / ETIQ_CHECK.length) { dr = 0; dg = 29; db = 252; }
+          }
+
+          annotCtx.fillStyle = `rgba(${dr},${dg},${db},${da.toFixed(2)})`;
+          annotCtx.beginPath();
+          annotCtx.arc(ETIQ_DOT_X[col], ETIQ_DOT_Y[row], ETIQ_DOT_R, 0, Math.PI * 2);
+          annotCtx.fill();
+        }
+      }
+    }
+
+    annotCtx.restore();
+    annotCtx.globalAlpha = 1;
+  });
+}
+
+function drawEtiquettes2(t) {
+  if (!etiq2LocalPositions.length || etiq2AnimStartMs === null) return;
+  parallaxGroup2.updateMatrixWorld(true);
+  camera2.updateMatrixWorld();
+
+  const elapsed = (performance.now() - etiq2AnimStartMs) / 1000;
+
+  const T1  = ETIQ_INTRO_DUR;
+  const T2  = T1 + ETIQ_INTRO_DOTS_DUR;
+  const T3  = T2  + ETIQ2_SWEEP_DUR;
+  const T3F = T3  + ETIQ_SWEEP_FADE_DUR;
+  const T3A = T3F + ETIQ_CHART_IN_DUR;
+  const T3B = T3A + ETIQ_CHART_HOLD_DUR;
+  const T3C = T3B + ETIQ_CHART_OUT_DUR;
+  const T4  = T3C + ETIQ_CHECK_DUR;
+  const T5  = T4  + ETIQ_PAUSE_DUR;
+  const T6  = T5  + ETIQ_OUTRO_DUR;
+
+  if (elapsed < 0 || elapsed > T6) return;
+
+  etiq2LocalPositions.forEach(etiq => {
+    const worldPos = etiq.localPos.clone();
+    parallaxGroup2.localToWorld(worldPos);
+    const sc = projectToScreen2(worldPos);
+    if (sc.behind) return;
+
+    // Intro : carte glisse depuis +16px, fondu easeOutCubic
+    const introP      = easeOutCubic(Math.min(elapsed / ETIQ_INTRO_DUR, 1));
+    const introOffset = (1 - introP) * 16;
+
+    // Outro : fondu + légère descente
+    const outroRaw    = elapsed > T5 ? Math.min((elapsed - T5) / ETIQ_OUTRO_DUR, 1) : 0;
+    const outroP      = easeInOutQuad(outroRaw);
+    const outroOffset = outroP * 6;
+
+    const s  = ETIQ_SCALE;
+    const cx = sc.x - (34.22 * s) / 2;
+    const cy = sc.y - (35.67 * s) / 2 + ETIQ2_Y_OFFSET + introOffset + outroOffset;
+
+    annotCtx.save();
+    annotCtx.globalAlpha = introP * (1 - outroP) * scene2FadeIn;
+    annotCtx.translate(cx, cy);
+    annotCtx.scale(s, s);
+
+    annotCtx.fillStyle = '#00FCD9';
+    annotCtx.fill(ETIQ_CARD_PATH);
+
+    if (elapsed >= T1) {
+      const rippleE   = elapsed - T1;
+      const maxDist   = Math.sqrt(8);
+      const inRipple    = elapsed < T2;
+      const inSweep     = elapsed >= T2  && elapsed < T3;
+      const inSweepFade = elapsed >= T3  && elapsed < T3F;
+      const inChartIn   = elapsed >= T3F && elapsed < T3A;
+      const inChartHld  = elapsed >= T3A && elapsed < T3B;
+      const inChartOut  = elapsed >= T3B && elapsed < T3C;
+      const inChart     = inChartIn || inChartHld || inChartOut;
+      const inCheck     = elapsed >= T3C;  // reste visible jusqu'à la fin
+
+      const sweepHead = inSweep      ? ((elapsed - T2) / ETIQ2_SWEEP_DUR) * (ETIQ2_LAPS * ETIQ_PERI_LEN)
+                      : inSweepFade  ? ETIQ2_LAPS * ETIQ_PERI_LEN
+                      : -1;
+      const bandSize  = inSweep      ? Math.min(5, 1 + Math.floor(Math.min(sweepHead, 4)))
+                      : inSweepFade  ? Math.max(0, Math.ceil(5 * (1 - (elapsed - T3) / ETIQ_SWEEP_FADE_DUR)))
+                      : 5;
+      const checkProgress = inCheck ? Math.min((elapsed - T3C) / ETIQ_CHECK_DUR, 1) : 0;
+      const easedCheck    = easeInOutQuad(checkProgress);
+
+      for (let row = 0; row < 5; row++) {
+        for (let col = 0; col < 5; col++) {
+          const dist     = Math.sqrt((col - 2) ** 2 + (row - 2) ** 2);
+          const dotDelay = inRipple ? (dist / maxDist) * (ETIQ_INTRO_DOTS_DUR * 0.3) : 0;
+          const dotA     = inRipple ? Math.min(Math.max((rippleE - dotDelay) / 0.2, 0), 1) : 1;
+          if (dotA <= 0) continue;
+
+          let dr = 255, dg = 255, db = 255, da = dotA;
+
+          if ((inSweep || inSweepFade) && sweepHead >= 0 && bandSize > 0) {
+            const pi = ETIQ_PERIMETER.findIndex(([pc, pr]) => pc === col && pr === row);
+            if (pi !== -1) {
+              const head   = sweepHead % ETIQ_PERI_LEN;
+              const behind = (head - pi + ETIQ_PERI_LEN) % ETIQ_PERI_LEN;
+              if (behind < bandSize) { dr = 0; dg = 29; db = 252; da = 1; }
+            }
+          } else if (inChart) {
+            const barH = etiq2BarData ? etiq2BarData[0][col] : 3;
+            let dotsLit;
+            if (inChartIn) {
+              const e = elapsed - T3F;
+              const colP = easeOutCubic(Math.max(0, Math.min((e - col * 0.06) / 0.26, 1)));
+              dotsLit = Math.floor(colP * barH);
+            } else if (inChartHld) {
+              dotsLit = barH;
+            } else {
+              const e = elapsed - T3B;
+              const p = easeInOutQuad(e / ETIQ_CHART_OUT_DUR);
+              dotsLit = Math.max(0, Math.round((1 - p) * barH));
+            }
+            if (4 - row < dotsLit) { dr = 0; dg = 29; db = 252; }
+          } else if (inCheck) {
+            const ci = ETIQ_CHECK.findIndex(([cc, cr]) => cc === col && cr === row);
+            if (ci !== -1 && easedCheck > ci / ETIQ_CHECK.length) { dr = 0; dg = 29; db = 252; }
+          }
+
+          annotCtx.fillStyle = `rgba(${dr},${dg},${db},${da.toFixed(2)})`;
+          annotCtx.beginPath();
+          annotCtx.arc(ETIQ_DOT_X[col], ETIQ_DOT_Y[row], ETIQ_DOT_R, 0, Math.PI * 2);
+          annotCtx.fill();
+        }
+      }
+    }
+
+    annotCtx.restore();
+    annotCtx.globalAlpha = 1;
+  });
+}
+
 const tickLen = 10;
 
 const fadeOverlay = document.getElementById('fadeOverlay');
 function updateFade() {
-  const h = document.getElementById('fadeHeight').value;
-  const op = document.getElementById('fadeOpacity').value;
-  fadeOverlay.style.background = `linear-gradient(to bottom, var(--bg) 0%, transparent ${h}%)`;
-  fadeOverlay.style.opacity = op;
+  fadeOverlay.style.background = `linear-gradient(to bottom, var(--bg) 0%, transparent 30%)`;
+  fadeOverlay.style.opacity = 1;
 }
 
 /* ====================== BOKEH (CSS backdrop-filter) ====================== */
 const bokehOverlay = document.getElementById('bokehOverlay');
-const focusCursor = document.getElementById('focusCursor');
 let bokehEnabled = true;
 let focusX = 46.328125, focusY = 63.92552366175329; // % position
-let settingFocus = false;
 
 function updateBokeh() {
   if (!bokehEnabled) { bokehOverlay.style.display = 'none'; return; }
-  const blur = document.getElementById('bokehBlur').value;
-  const radius = document.getElementById('bokehRadius').value;
-  const softness = document.getElementById('bokehSoftness').value;
-  const inner = Math.max(0, parseInt(radius) - parseInt(softness) * 0.5);
-  const outer = parseInt(radius) + parseInt(softness) * 0.5;
-  const aspect = window.innerHeight / window.innerWidth;
+  const blur = 30;
+  const radius = 59;
+  const softness = 25;
+  const inner = Math.max(0, radius - softness * 0.5);
+  const outer = radius + softness * 0.5;
   const rx = outer;
   const ry = outer * (window.innerWidth / window.innerHeight);
 
@@ -1633,128 +1775,6 @@ function updateBokeh() {
   bokehOverlay.style.maskImage = mask;
 }
 
-// Focus placement
-document.getElementById('setFocusBtn').addEventListener('click', () => {
-  settingFocus = !settingFocus;
-  document.getElementById('setFocusBtn').textContent = settingFocus ? 'ANNULER' : 'PLACER LE FOCUS';
-  document.getElementById('focusHint').style.display = settingFocus ? 'block' : 'none';
-  document.body.classList.toggle('focus-mode', settingFocus);
-  focusCursor.style.display = settingFocus ? 'block' : 'none';
-});
-
-document.addEventListener('mousemove', e => {
-  if (!settingFocus) return;
-  focusCursor.style.left = e.clientX + 'px';
-  focusCursor.style.top = e.clientY + 'px';
-});
-
-document.getElementById('canvas').addEventListener('click', e => {
-  if (!settingFocus) return;
-  focusX = (e.clientX / window.innerWidth) * 100;
-  focusY = (e.clientY / window.innerHeight) * 100;
-  settingFocus = false;
-  document.getElementById('setFocusBtn').textContent = 'PLACER LE FOCUS';
-  document.getElementById('focusHint').style.display = 'none';
-  document.body.classList.remove('focus-mode');
-  focusCursor.style.display = 'none';
-  updateBokeh();
-});
-
-document.getElementById('bokehToggle').addEventListener('click', () => {
-  bokehEnabled = !bokehEnabled;
-  document.getElementById('bokehToggle').classList.toggle('on', bokehEnabled);
-  document.getElementById('bokehControls').style.display = bokehEnabled ? 'block' : 'none';
-  updateBokeh();
-});
-['bokehBlur', 'bokehRadius', 'bokehSoftness'].forEach(id => {
-  document.getElementById(id).addEventListener('input', e => {
-    document.getElementById(id + 'Val').textContent = e.target.value;
-    updateBokeh();
-  });
-});
-
-/* ====================== CONFIG SAVE/LOAD ====================== */
-function collectConfig() {
-  const config = {};
-  document.querySelectorAll('input').forEach(inp => config[inp.id] = inp.value);
-  config['altToggleOn'] = showAltitudes;
-  config['bokehOn'] = bokehEnabled;
-  config['focusX'] = focusX;
-  config['focusY'] = focusY;
-  if (hotspotLocalPos) {
-    config['hotspotLX'] = hotspotLocalPos.x;
-    config['hotspotLY'] = hotspotLocalPos.y;
-    config['hotspotLZ'] = hotspotLocalPos.z;
-  }
-  return config;
-}
-
-function encodeConfig(cfg) {
-  try { return btoa(unescape(encodeURIComponent(JSON.stringify(cfg)))); } catch(e) { return ''; }
-}
-function decodeConfig(str) {
-  try { return JSON.parse(decodeURIComponent(escape(atob(str)))); } catch(e) { return null; }
-}
-
-function applyConfig(config) {
-  for (const id in config) {
-    const el = document.getElementById(id);
-    if (el && el.tagName === 'INPUT') {
-      el.value = config[id];
-      const valEl = document.getElementById(id + 'Val');
-      if (valEl) valEl.textContent = parseFloat(config[id]) === parseFloat(config[id])
-        ? config[id]
-        : config[id];
-    }
-  }
-  if (config['altToggleOn'] !== undefined) {
-    showAltitudes = config['altToggleOn'] === true || config['altToggleOn'] === 'true';
-    document.getElementById('altToggle').classList.toggle('on', showAltitudes);
-  }
-  if (config['bokehOn'] !== undefined) {
-    bokehEnabled = config['bokehOn'] === true || config['bokehOn'] === 'true';
-    document.getElementById('bokehToggle').classList.toggle('on', bokehEnabled);
-    document.getElementById('bokehControls').style.display = bokehEnabled ? 'block' : 'none';
-  }
-  if (config['focusX'] !== undefined) focusX = parseFloat(config['focusX']);
-  if (config['focusY'] !== undefined) focusY = parseFloat(config['focusY']);
-
-  if (config['hotspotLX'] !== undefined) {
-    hotspotLocalPos = new THREE.Vector3(
-      parseFloat(config['hotspotLX']),
-      parseFloat(config['hotspotLY']),
-      parseFloat(config['hotspotLZ'])
-    );
-  }
-
-  if (config['ambient']) ambientLight.intensity = parseFloat(config['ambient']);
-  if (config['sun']) sun.intensity = parseFloat(config['sun']);
-  if (config['sunAz'] || config['sunEl']) updateSunPosition();
-
-  // Sync Three.js uniforms
-  scene.fog.near = parseFloat(config['fogStart'] || 20);
-  scene.fog.far = scene.fog.near + 11.0;
-  topoUniforms.uSpacing.value = parseFloat(config['topoSpacing'] || 150);
-  topoUniforms.uLineWidth.value = parseFloat(config['topoWidth'] || 0.1);
-  if (config['topoColor']) topoUniforms.uColor.value.set(config['topoColor']);
-  waveUniforms.uPointSize.value = parseFloat(config['pointSize'] || 0.025);
-  if (config['pointColor']) waveUniforms.uBaseColor.value.set(config['pointColor']);
-  waveUniforms.uWaveSpeed.value = parseFloat(config['waveSpeed'] || 0.5);
-  waveUniforms.uWaveSize.value = parseFloat(config['waveSize'] || 0.8);
-  if (config['waveColor']) waveUniforms.uWaveColor.value.set(config['waveColor']);
-}
-
-function loadSavedConfig() {
-  // Priority: URL hash > localStorage
-  const hash = window.location.hash.slice(1);
-  let config = null;
-  if (hash) config = decodeConfig(hash);
-  if (!config) {
-    const ls = localStorage.getItem('terrain_config_v2');
-    if (ls) try { config = JSON.parse(ls); } catch(e) {}
-  }
-  if (config) applyConfig(config);
-}
 
 // (hotspot supprimé — scroll-driven zoom)
 let terrainCollisionMesh, pointsObject;
@@ -1764,11 +1784,10 @@ scene.add(parallaxGroup);
 parallaxGroup.add(housesGroup);
 
 function updateHouses() {
-  const color = new THREE.Color(document.getElementById('houseColor').value);
-  const alpha = parseFloat(document.getElementById('houseAlpha').value);
+  const color = new THREE.Color('#b3c6ff');
+  const alpha = 1;
   housesGroup.traverse(c => {
     if (c.isMesh) {
-      const scaleY = housesGroup.scale.y; // preserve current intro scale
       c.material = new THREE.MeshStandardMaterial({ color, transparent: true, opacity: alpha, fog: true });
     }
   });
@@ -1778,7 +1797,7 @@ function regenerateGrid() {
   if (!terrainCollisionMesh) return;
   if (pointsObject) parallaxGroup.remove(pointsObject);
 
-  const density = parseInt(document.getElementById('density').value);
+  const density = 202;
   const bbox = new THREE.Box3().setFromObject(terrainCollisionMesh);
   const size = bbox.getSize(new THREE.Vector3());
   const nx = density, nz = Math.round(density * (size.z / size.x));
@@ -1875,6 +1894,8 @@ async function load() {
 
   // Extract & hide alt* and onde* meshes BEFORE applying topo material
   extractAltMeshes(tData.scene);
+  extractEtiquetteMeshes(tData.scene);
+  extractEtiquetteMeshes(mData.scene);
   extractOndeMeshes(tData.scene);
   detectHotspot(tData.scene);
   detectHotspot(mData.scene);
@@ -1897,8 +1918,6 @@ async function load() {
     waveUniforms.uWaveWeight2.value = 0.0;
   }
 
-  loadSavedConfig();
-  loadSavedConfigS2();
   updateHouses();
   updateFade();
   updateBokeh();
@@ -1908,33 +1927,16 @@ async function load() {
   // Init scroll targets maintenant — hotspot est déjà connu
   updateHotspotWorldPos();
   initScrollTargets();
+  const elapsed = performance.now() - loaderStartTime;
+  if (elapsed < 2000) await new Promise(r => setTimeout(r, 2000 - elapsed));
   startIntro();
 }
 
 /* ====================== UI LISTENERS ====================== */
-const ui = document.getElementById('uiPanel');
-const ui2 = document.getElementById('uiPanel2');
-
-function togglePanel() {
-  if (scene2Active) {
-    ui2.style.display = ui2.style.display === 'block' ? 'none' : 'block';
-    ui.style.display = 'none';
-  } else {
-    ui.style.display = ui.style.display === 'block' ? 'none' : 'block';
-    ui2.style.display = 'none';
-  }
-}
-window.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    togglePanel();
-    if (!scene2Active && ui.style.display === 'block') syncCamSliders();
-    if (scene2Active && ui2.style.display === 'block') syncCam2Sliders();
-  }
-});
 
 function updateSunPosition() {
-  const az = parseFloat(document.getElementById('sunAz').value) * Math.PI / 180;
-  const el = parseFloat(document.getElementById('sunEl').value) * Math.PI / 180;
+  const az = 233 * Math.PI / 180;
+  const el = 90 * Math.PI / 180;
   sun.position.set(
     Math.cos(el) * Math.sin(az) * 10,
     Math.sin(el) * 10,
@@ -1942,8 +1944,8 @@ function updateSunPosition() {
   );
 }
 function updateSunPosition2() {
-  const az = parseFloat(document.getElementById('s2sunAz').value) * Math.PI / 180;
-  const el = parseFloat(document.getElementById('s2sunEl').value) * Math.PI / 180;
+  const az = 322 * Math.PI / 180;
+  const el = 68 * Math.PI / 180;
   sun2.position.set(
     Math.cos(el) * Math.sin(az) * 10,
     Math.sin(el) * 10,
@@ -1951,315 +1953,21 @@ function updateSunPosition2() {
   );
 }
 
-// ---- Scène 1 listeners ----
-document.getElementById('ambient').addEventListener('input', e => { ambientLight.intensity = parseFloat(e.target.value); document.getElementById('ambientVal').textContent = e.target.value; });
-document.getElementById('sun').addEventListener('input', e => { sun.intensity = parseFloat(e.target.value); document.getElementById('sunVal').textContent = e.target.value; });
-document.getElementById('sunAz').addEventListener('input', e => { document.getElementById('sunAzVal').textContent = e.target.value; updateSunPosition(); });
-document.getElementById('sunEl').addEventListener('input', e => { document.getElementById('sunElVal').textContent = e.target.value; updateSunPosition(); });
-document.getElementById('fadeHeight').addEventListener('input', e => { document.getElementById('fadeHeightVal').textContent = e.target.value; updateFade(); });
-document.getElementById('fadeOpacity').addEventListener('input', e => { document.getElementById('fadeOpacityVal').textContent = parseFloat(e.target.value).toFixed(2); updateFade(); });
-document.getElementById('fogStart').addEventListener('input', e => { const v = parseFloat(e.target.value); scene.fog.near = v; scene.fog.far = v + 11.0; document.getElementById('fogStartVal').textContent = v; });
-document.getElementById('topoSpacing').addEventListener('input', e => { topoUniforms.uSpacing.value = parseFloat(e.target.value); document.getElementById('topoSpacingVal').textContent = e.target.value; });
-document.getElementById('topoWidth').addEventListener('input', e => { topoUniforms.uLineWidth.value = parseFloat(e.target.value); document.getElementById('topoWidthVal').textContent = e.target.value; });
-document.getElementById('topoColor').addEventListener('input', e => topoUniforms.uColor.value.set(e.target.value));
-document.getElementById('altToggle').addEventListener('click', () => { showAltitudes = !showAltitudes; document.getElementById('altToggle').classList.toggle('on', showAltitudes); });
-document.getElementById('altFontSize').addEventListener('input', e => document.getElementById('altFontSizeVal').textContent = e.target.value);
-document.getElementById('altSpeed').addEventListener('input', e => document.getElementById('altSpeedVal').textContent = parseFloat(e.target.value).toFixed(2));
-document.getElementById('density').addEventListener('change', regenerateGrid);
-document.getElementById('density').addEventListener('input', e => document.getElementById('densityVal').textContent = e.target.value);
-document.getElementById('pointSize').addEventListener('input', e => { waveUniforms.uPointSize.value = parseFloat(e.target.value); document.getElementById('pointSizeVal').textContent = e.target.value; });
-document.getElementById('pointColor').addEventListener('input', e => waveUniforms.uBaseColor.value.set(e.target.value));
-document.getElementById('waveSpeed').addEventListener('input', e => { waveUniforms.uWaveSpeed.value = parseFloat(e.target.value); document.getElementById('waveSpeedVal').textContent = e.target.value; });
-document.getElementById('waveSize').addEventListener('input', e => { waveUniforms.uWaveSize.value = parseFloat(e.target.value); document.getElementById('waveSizeVal').textContent = e.target.value; });
-document.getElementById('waveSizeBoost').addEventListener('input', e => { waveUniforms.uWaveSizeBoost.value = parseFloat(e.target.value); document.getElementById('waveSizeBoostVal').textContent = e.target.value; });
-document.getElementById('waveColor').addEventListener('input', e => waveUniforms.uWaveColor.value.set(e.target.value));
-document.getElementById('houseAlpha').addEventListener('input', e => { updateHouses(); document.getElementById('houseAlphaVal').textContent = e.target.value; });
-document.getElementById('houseColor').addEventListener('input', updateHouses);
-
-// ---- Scène 2 listeners ----
-document.getElementById('s2ambient').addEventListener('input', e => { ambientLight2.intensity = parseFloat(e.target.value); document.getElementById('s2ambientVal').textContent = e.target.value; });
-document.getElementById('s2sun').addEventListener('input', e => { sun2.intensity = parseFloat(e.target.value); document.getElementById('s2sunVal').textContent = e.target.value; });
-document.getElementById('s2sunAz').addEventListener('input', e => { document.getElementById('s2sunAzVal').textContent = e.target.value; updateSunPosition2(); });
-document.getElementById('s2sunEl').addEventListener('input', e => { document.getElementById('s2sunElVal').textContent = e.target.value; updateSunPosition2(); });
-document.getElementById('s2density').addEventListener('change', regenerateGrid2);
-document.getElementById('s2density').addEventListener('input', e => document.getElementById('s2densityVal').textContent = e.target.value);
-document.getElementById('s2pointSize').addEventListener('input', e => { waveUniforms2.uPointSize.value = parseFloat(e.target.value); document.getElementById('s2pointSizeVal').textContent = e.target.value; });
-document.getElementById('s2pointColor').addEventListener('input', e => { waveUniforms2.uBaseColor.value.set(e.target.value); });
-
-// ── Scan bâtiment ──
-document.getElementById('s2scan1Color').addEventListener('input', e => {
-  if (!scan1Uniforms) return;
-  scan1Uniforms.uBaseColor.value.set(e.target.value);
-  scan1Uniforms.uScanColor.value.set(e.target.value);
-});
-document.getElementById('s2scan1Size').addEventListener('input', e => {
-  const v = parseFloat(e.target.value);
-  document.getElementById('s2scan1SizeVal').textContent = v;
-  if (scan1Uniforms) scan1Uniforms.uPointSize.value = v;
-});
-document.getElementById('s2scan1Alpha').addEventListener('input', e => {
-  const v = parseFloat(e.target.value);
-  document.getElementById('s2scan1AlphaVal').textContent = v.toFixed(2);
-  if (scan1Uniforms) scan1Uniforms.uBaseAlpha.value = v;
-});
-document.getElementById('s2scan1Speed').addEventListener('input', e => {
-  const v = parseFloat(e.target.value);
-  document.getElementById('s2scan1SpeedVal').textContent = v.toFixed(1);
-  scan1Speed = v;
-});
-document.getElementById('s2scan1Density').addEventListener('input', e => {
-  document.getElementById('s2scan1DensityVal').textContent = e.target.value;
-});
-document.getElementById('s2scan1Density').addEventListener('change', e => {
-  if (!scan1Mesh || !scan1Mat_ref) return;
-  const v = parseInt(e.target.value);
-  document.getElementById('s2scan1DensityVal').textContent = v;
-  if (scan1Points) { parallaxGroup2.remove(scan1Points); scan1Points.geometry.dispose(); }
-  const bw = new THREE.Box3().setFromObject(scan1Mesh);
-  const bMn = bw.min, bMx = bw.max, bSz = bw.getSize(new THREE.Vector3());
-  const pos = [], rnd = [];
-  for (let ix = 0; ix <= v; ix++) for (let iy = 0; iy <= v; iy++) for (let iz = 0; iz <= v; iz++) {
-    pos.push(bMn.x+(ix/v)*bSz.x+(Math.random()-.5)*(bSz.x/v)*.9,
-             bMn.y+(iy/v)*bSz.y+(Math.random()-.5)*(bSz.y/v)*.9,
-             bMn.z+(iz/v)*bSz.z+(Math.random()-.5)*(bSz.z/v)*.9);
-    rnd.push(Math.random());
-  }
-  const lp = [], tmp = new THREE.Vector3();
-  for (let i = 0; i < pos.length; i += 3) {
-    tmp.set(pos[i], pos[i+1], pos[i+2]); parallaxGroup2.worldToLocal(tmp);
-    lp.push(tmp.x, tmp.y, tmp.z);
-  }
-  // Mettre à jour uYMin/uYMax en espace local
-  const bMnL = new THREE.Vector3().copy(bMn); parallaxGroup2.worldToLocal(bMnL);
-  const bMxL = new THREE.Vector3().copy(bMx); parallaxGroup2.worldToLocal(bMxL);
-  scan1Uniforms.uYMin.value = Math.min(bMnL.y, bMxL.y);
-  scan1Uniforms.uYMax.value = Math.max(bMnL.y, bMxL.y);
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
-  g.setAttribute('normal',   new THREE.Float32BufferAttribute(new Float32Array(lp.length), 3));
-  g.setAttribute('aRandom',  new THREE.Float32BufferAttribute(rnd, 1));
-  scan1Points = new THREE.Points(g, scan1Mat_ref);
-  scan1Points.frustumCulled = false;
-  parallaxGroup2.add(scan1Points);
-});
-
 // ── Onde de sol ──
 const sweepCfg = { range: 8.0, cycle: 7.0 };
-document.getElementById('s2sweepColor').addEventListener('input', e => { waveUniforms2.uSweepColor.value.set(e.target.value); });
-document.getElementById('s2sweepWidth').addEventListener('input', e => {
-  const v = parseFloat(e.target.value);
-  document.getElementById('s2sweepWidthVal').textContent = v.toFixed(2);
-  waveUniforms2.uSweepWidth.value = v;
-});
-document.getElementById('s2sweepRange').addEventListener('input', e => {
-  const v = parseFloat(e.target.value);
-  document.getElementById('s2sweepRangeVal').textContent = v.toFixed(2);
-  sweepCfg.range = v;
-});
-document.getElementById('s2sweepCycle').addEventListener('input', e => {
-  const v = parseFloat(e.target.value);
-  document.getElementById('s2sweepCycleVal').textContent = v.toFixed(2);
-  sweepCfg.cycle = v;
-});
-document.getElementById('s2sweepStrength').addEventListener('input', e => {
-  const v = parseFloat(e.target.value);
-  document.getElementById('s2sweepStrengthVal').textContent = v.toFixed(2);
-  waveUniforms2.uSweepStrength.value = v;
-});
-document.getElementById('s2shadowOpacity').addEventListener('input', e => {
-  const v = parseFloat(e.target.value);
-  document.getElementById('s2shadowOpacityVal').textContent = v.toFixed(2);
-  if (scene2ShadowMesh) scene2ShadowMesh.material.opacity = v;
-});
-['s2shadowRot', 's2shadowScale', 's2shadowOffX', 's2shadowOffZ'].forEach(id => {
-  const el = document.getElementById(id);
-  el.addEventListener('input', e => {
-    const v = parseFloat(e.target.value);
-    const valEl = document.getElementById(id + 'Val');
-    if (valEl) valEl.textContent = (id === 's2shadowRot') ? Math.round(v) : v.toFixed(2);
-    applyShadowTransform2();
-  });
-});
-document.getElementById('s2shadowBlend').addEventListener('change', applyShadowBlend2);
-// Caméra scène 1
-function syncCamSliders() {
-  document.getElementById('camPx').value = camera.position.x;
-  document.getElementById('camPy').value = camera.position.y;
-  document.getElementById('camPz').value = camera.position.z;
-  document.getElementById('camPxVal').textContent = camera.position.x.toFixed(3);
-  document.getElementById('camPyVal').textContent = camera.position.y.toFixed(3);
-  document.getElementById('camPzVal').textContent = camera.position.z.toFixed(3);
-  document.getElementById('camTx').value = controls.target.x;
-  document.getElementById('camTy').value = controls.target.y;
-  document.getElementById('camTz').value = controls.target.z;
-  document.getElementById('camTxVal').textContent = controls.target.x.toFixed(3);
-  document.getElementById('camTyVal').textContent = controls.target.y.toFixed(3);
-  document.getElementById('camTzVal').textContent = controls.target.z.toFixed(3);
-}
-['camPx','camPy','camPz'].forEach(id => {
-  document.getElementById(id).addEventListener('input', e => {
-    const axis = id.slice(-1);
-    camera.position[axis] = parseFloat(e.target.value);
-    document.getElementById(id + 'Val').textContent = parseFloat(e.target.value).toFixed(3);
-    controls.update();
-  });
-});
-['camTx','camTy','camTz'].forEach(id => {
-  document.getElementById(id).addEventListener('input', e => {
-    const axis = id.slice(-1);
-    controls.target[axis] = parseFloat(e.target.value);
-    document.getElementById(id + 'Val').textContent = parseFloat(e.target.value).toFixed(3);
-    controls.update();
-  });
-});
-document.getElementById('copyCamBtn').addEventListener('click', () => {
-  const txt = `camera.position.set(${camera.position.x.toFixed(4)}, ${camera.position.y.toFixed(4)}, ${camera.position.z.toFixed(4)});\ncontrols.target.set(${controls.target.x.toFixed(4)}, ${controls.target.y.toFixed(4)}, ${controls.target.z.toFixed(4)});`;
-  navigator.clipboard.writeText(txt).then(() => { const n = document.getElementById('camCopyNote'); n.style.display = 'block'; setTimeout(() => n.style.display = 'none', 2000); });
-});
-
-// Caméra scène 2 — orthographique
-function syncCam2Sliders() {
-  // Recalculer az/el depuis la position actuelle de la caméra
-  const tx = controls2.target.x, ty = controls2.target.y, tz = controls2.target.z;
-  const dx = camera2.position.x - tx;
-  const dy = camera2.position.y - ty;
-  const dz = camera2.position.z - tz;
-  const r  = Math.sqrt(dx*dx + dy*dy + dz*dz) || 1;
-  const el = Math.asin(dy / r) * 180 / Math.PI;
-  const az = Math.atan2(dx, dz) * 180 / Math.PI;
-  const zoom = parseFloat(document.getElementById('s2orthoZoom').value);
-
-  document.getElementById('s2orthoEl').value  = el.toFixed(1);
-  document.getElementById('s2orthoElVal').textContent = el.toFixed(1);
-  document.getElementById('s2orthoAz').value  = ((az % 360) + 360) % 360;
-  document.getElementById('s2orthoAzVal').textContent = (((az % 360) + 360) % 360).toFixed(1);
-  document.getElementById('s2orthoZoom').value = zoom;
-  document.getElementById('s2orthoZoomVal').textContent = zoom.toFixed(2);
-  document.getElementById('s2camTx').value = tx.toFixed(3);
-  document.getElementById('s2camTxVal').textContent = tx.toFixed(3);
-  document.getElementById('s2camTy').value = ty.toFixed(3);
-  document.getElementById('s2camTyVal').textContent = ty.toFixed(3);
-  document.getElementById('s2camTz').value = tz.toFixed(3);
-  document.getElementById('s2camTzVal').textContent = tz.toFixed(3);
-}
-['s2orthoZoom','s2orthoAz','s2orthoEl','s2camTx','s2camTy','s2camTz'].forEach(id => {
-  document.getElementById(id).addEventListener('input', e => {
-    const vEl = document.getElementById(id + 'Val');
-    if (vEl) vEl.textContent = parseFloat(e.target.value).toFixed(id === 's2orthoZoom' ? 2 : (id.startsWith('s2camT') ? 3 : 1));
-    updateOrthoCamera();
-  });
-});
-document.getElementById('s2copyCamBtn').addEventListener('click', () => {
-  const zoom = parseFloat(document.getElementById('s2orthoZoom').value);
-  const az   = parseFloat(document.getElementById('s2orthoAz').value);
-  const el   = parseFloat(document.getElementById('s2orthoEl').value);
-  const tx   = parseFloat(document.getElementById('s2camTx').value);
-  const ty   = parseFloat(document.getElementById('s2camTy').value);
-  const tz   = parseFloat(document.getElementById('s2camTz').value);
-  const txt  = `zoom:${zoom} az:${az}° el:${el}° cible:(${tx},${ty},${tz})`;
-  navigator.clipboard.writeText(txt).then(() => { const n = document.getElementById('s2camCopyNote'); n.style.display = 'block'; setTimeout(() => n.style.display = 'none', 2000); });
-});
-
-document.getElementById('saveBtn').addEventListener('click', () => {
-  const config = collectConfig();
-  localStorage.setItem('terrain_config_v2', JSON.stringify(config));
-  const encoded = encodeConfig(config);
-  history.replaceState(null, '', '#' + encoded);
-  const btn = document.getElementById('saveBtn');
-  btn.textContent = 'CONFIG SAUVEGARDÉE ✓';
-  setTimeout(() => btn.textContent = 'SAUVEGARDER CONFIG', 2000);
-});
-
-document.getElementById('s2saveBtn').addEventListener('click', () => {
-  const config2 = {
-    s2ambient: document.getElementById('s2ambient').value,
-    s2sun: document.getElementById('s2sun').value,
-    s2sunAz: document.getElementById('s2sunAz').value,
-    s2sunEl: document.getElementById('s2sunEl').value,
-    s2density: document.getElementById('s2density').value,
-    s2pointSize: document.getElementById('s2pointSize').value,
-    s2pointColor: document.getElementById('s2pointColor').value,
-    s2sweepColor: document.getElementById('s2sweepColor').value,
-    s2sweepWidth: document.getElementById('s2sweepWidth').value,
-    s2sweepRange: document.getElementById('s2sweepRange').value,
-    s2sweepCycle: document.getElementById('s2sweepCycle').value,
-    s2sweepStrength: document.getElementById('s2sweepStrength').value,
-    s2shadowOpacity: document.getElementById('s2shadowOpacity').value,
-    s2shadowRot: document.getElementById('s2shadowRot').value,
-    s2shadowScale: document.getElementById('s2shadowScale').value,
-    s2shadowOffX: document.getElementById('s2shadowOffX').value,
-    s2shadowOffZ: document.getElementById('s2shadowOffZ').value,
-    s2shadowBlend: document.getElementById('s2shadowBlend').value,
-    s2orthoZoom: document.getElementById('s2orthoZoom').value,
-    s2orthoAz:   document.getElementById('s2orthoAz').value,
-    s2orthoEl:   document.getElementById('s2orthoEl').value,
-    s2camTx: document.getElementById('s2camTx').value,
-    s2camTy: document.getElementById('s2camTy').value,
-    s2camTz: document.getElementById('s2camTz').value,
-  };
-  localStorage.setItem('terrain_config_s2', JSON.stringify(config2));
-  const btn = document.getElementById('s2saveBtn');
-  btn.textContent = 'SCÈNE 2 SAUVEGARDÉE ✓';
-  setTimeout(() => btn.textContent = 'SAUVEGARDER CONFIG S2', 2000);
-});
-
-function loadSavedConfigS2() {
-  const ls = localStorage.getItem('terrain_config_s2');
-  if (!ls) return;
-  try {
-    const cfg = JSON.parse(ls);
-    Object.keys(cfg).forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.value = cfg[id];
-      const vEl = document.getElementById(id + 'Val');
-      if (vEl) vEl.textContent = cfg[id];
-    });
-    ambientLight2.intensity = parseFloat(cfg.s2ambient || 1.35);
-    sun2.intensity = parseFloat(cfg.s2sun || 1.85);
-    updateSunPosition2();
-    waveUniforms2.uPointSize.value = parseFloat(cfg.s2pointSize || 0.005);
-    if (cfg.s2pointColor) waveUniforms2.uBaseColor.value.set(cfg.s2pointColor);
-    if (cfg.s2sweepColor) waveUniforms2.uSweepColor.value.set(cfg.s2sweepColor);
-    if (cfg.s2sweepWidth !== undefined) waveUniforms2.uSweepWidth.value = parseFloat(cfg.s2sweepWidth);
-    if (cfg.s2sweepRange !== undefined) sweepCfg.range = parseFloat(cfg.s2sweepRange);
-    if (cfg.s2sweepCycle !== undefined) sweepCfg.cycle = parseFloat(cfg.s2sweepCycle);
-    if (cfg.s2sweepStrength !== undefined) waveUniforms2.uSweepStrength.value = parseFloat(cfg.s2sweepStrength);
-    if (scene2ShadowMesh && cfg.s2shadowOpacity !== undefined) scene2ShadowMesh.material.opacity = parseFloat(cfg.s2shadowOpacity);
-    if (scene2ShadowMesh) applyShadowTransform2();
-    if (scene2ShadowMesh) applyShadowBlend2();
-    // Caméra ortho — updateOrthoCamera lira les sliders déjà mis à jour par la boucle forEach ci-dessus
-    updateOrthoCamera();
-  } catch(e) {}
-}
 
 /* ====================== ANIMATION ====================== */
 let mx = 0, my = 0;
 window.addEventListener('mousemove', e => {
-  if (settingFocus) return;
   mx = (e.clientX / window.innerWidth - 0.5) * 0.4;
   my = (e.clientY / window.innerHeight - 0.5) * 0.4;
 });
-
-document.getElementById('canvas').addEventListener('click', e => {
-  if (!settingFocus) return;
-  focusX = (e.clientX / window.innerWidth) * 100;
-  focusY = (e.clientY / window.innerHeight) * 100;
-  settingFocus = false;
-  document.getElementById('setFocusBtn').textContent = 'PLACER LE FOCUS';
-  document.getElementById('focusHint').style.display = 'none';
-  document.body.classList.remove('focus-mode');
-  focusCursor.style.display = 'none';
-  updateBokeh();
-});
-// (hotspot supprimé — scroll-driven zoom)
 
 const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
   const t = clock.getElapsedTime();
 
-  annotCanvas.width = window.innerWidth;
-  annotCanvas.height = window.innerHeight;
   annotCtx.clearRect(0, 0, annotCanvas.width, annotCanvas.height);
 
   // ===== SCÈNE 1 — toujours rendue sur renderer principal =====
@@ -2271,11 +1979,15 @@ function animate() {
 
   if (introPlaying) {
     updateIntro((performance.now() - introStart) / 1000);
+    updateAltWorldPositions();
+    drawAnnotations(t);
+    drawEtiquettes(t);
   } else {
     updateScrollAndTransition();
     updateHotspotWorldPos();
     updateAltWorldPositions();
-    if (!scene2Active) drawAnnotations(t);
+    // Annotations scène 1 : seulement si scène 2 n'est pas encore visible
+    if (!scene2Active && scene2FadeIn <= 0.01) { drawAnnotations(t); drawEtiquettes(t); }
   }
 
   // ===== SCÈNE 2 — rendue sur renderer2 quand chargée =====
@@ -2286,29 +1998,69 @@ function animate() {
     const sweepRange = sweepCfg.range;
     const phase = ((t % sweepCycle) / sweepCycle);
     waveUniforms2.uSweepPos.value = -sweepRange / 2 + phase * sweepRange;
-    // Scans des bâtiments scan1/2/3
-    // Scans des bâtiments supprimés
-    if (scan1Uniforms) {
-      scan1Uniforms.uTime.value = t;
-      const TRAVEL = scan1Speed;
-      const cycle = t % (TRAVEL * 2);
-      if (cycle < TRAVEL) {
-        // Descente : la bande recouvre le bâtiment du haut vers le bas
-        // uScanDir = -1 → traîne vers le haut (derrière la bande qui descend)
-        const u = cycle / TRAVEL;
-        scan1Uniforms.uScanY.value = scan1Uniforms.uYMax.value + (scan1Uniforms.uYMin.value - scan1Uniforms.uYMax.value) * u;
-        scan1Uniforms.uScanDir.value = -1.0;
+    if (scanItems2.length && activeScanIdx2 !== null) {
+      const item = scanItems2[activeScanIdx2];
+      item.uniforms.uTime.value = t;
+
+      if (scanAnimStartMs2 !== null) {
+        const elapsed = (performance.now() - scanAnimStartMs2) / 1000;
+        const TRAVEL = scan2Speed;
+        const PULSE  = 0.35;
+        const maxR   = item.uniforms.uMaxRadius.value;
+
+        if (elapsed < TRAVEL) {
+          item.uniforms.uRadius.value = maxR * easeInOutQuad(elapsed / TRAVEL);
+        } else if (elapsed < TRAVEL + PULSE) {
+          const pt = (elapsed - TRAVEL) / PULSE;
+          item.uniforms.uRadius.value = maxR * (1.0 + 0.18 * Math.sin(pt * Math.PI));
+        } else if (elapsed < 2 * TRAVEL + PULSE) {
+          const u = easeInOutQuad((elapsed - TRAVEL - PULSE) / TRAVEL);
+          item.uniforms.uRadius.value = maxR * (1.0 - u);
+        } else {
+          item.uniforms.uRadius.value = 0;
+        }
+        // Étiquette démarre 0.3s après le début du scan (même logique que scène 1)
+        if (elapsed >= 0.3 && etiq2AnimStartMs === null && etiq2LocalPositions.length > 0) {
+          etiq2AnimStartMs = performance.now();
+          etiq2BarData = etiqNewBarHeights(1);
+        }
       } else {
-        // Montée : la bande découvre le bâtiment du bas vers le haut
-        // uScanDir = +1 → traîne vers le bas (derrière la bande qui monte)
-        const u = (cycle - TRAVEL) / TRAVEL;
-        scan1Uniforms.uScanY.value = scan1Uniforms.uYMin.value + (scan1Uniforms.uYMax.value - scan1Uniforms.uYMin.value) * u;
-        scan1Uniforms.uScanDir.value = 1.0;
+        item.uniforms.uRadius.value = 0;
+      }
+
+      // Boucle : T6 de l'étiquette terminé → prochain scan (sans répétition)
+      if (etiq2AnimStartMs !== null) {
+        const _T1 = ETIQ_INTRO_DUR;
+        const _T2 = _T1 + ETIQ_INTRO_DOTS_DUR;
+        const _T3 = _T2 + ETIQ2_SWEEP_DUR;
+        const _T3F = _T3 + ETIQ_SWEEP_FADE_DUR;
+        const _T3A = _T3F + ETIQ_CHART_IN_DUR;
+        const _T3B = _T3A + ETIQ_CHART_HOLD_DUR;
+        const _T3C = _T3B + ETIQ_CHART_OUT_DUR;
+        const _T4  = _T3C + ETIQ_CHECK_DUR;
+        const _T5  = _T4  + ETIQ_PAUSE_DUR;
+        const _T6  = _T5  + ETIQ_OUTRO_DUR;
+        if ((performance.now() - etiq2AnimStartMs) / 1000 >= _T6) {
+          etiq2AnimStartMs = null;
+          etiq2BarData     = null;
+          lastScanIdx2  = activeScanIdx2;
+          scan2OrderIdx++;
+          if (!scan2Order || scan2OrderIdx >= scan2Order.length) {
+            // Cycle terminé : nouveau shuffle en évitant de démarrer par le dernier joué
+            scan2Order    = etiqNewShuffle(scanItems2.length, lastScanIdx2);
+            scan2OrderIdx = 0;
+          }
+          activeScanIdx2 = scan2Order[scan2OrderIdx];
+          etiq2LocalPositions = [scanItems2[activeScanIdx2].etiqLocalPos];
+          scanAnimStartMs2 = performance.now();
+        }
       }
     }
     parallaxGroup2.rotation.y += (mx * 0.14 - parallaxGroup2.rotation.y) * 0.08;
     parallaxGroup2.rotation.x += (my * 0.10 - parallaxGroup2.rotation.x) * 0.08;
     renderer2.render(scene2, camera2);
+    // Étiquette scène 2 : active dès que la scène commence à apparaître
+    if (scene2FadeIn > 0.01) drawEtiquettes2(t);
   }
 }
 
@@ -2320,6 +2072,8 @@ window.addEventListener('resize', () => {
   renderer2.setSize(window.innerWidth, window.innerHeight);
   waveUniforms.uScreenHeight.value = window.innerHeight;
   waveUniforms2.uScreenHeight.value = window.innerHeight;
+  annotCanvas.width = window.innerWidth;
+  annotCanvas.height = window.innerHeight;
   updateOrthoCamera();
   if (bokehEnabled) updateBokeh();
 });
