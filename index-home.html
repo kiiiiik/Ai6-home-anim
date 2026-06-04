@@ -852,7 +852,7 @@ function buildScanItem(mesh) {
   parallaxGroup2.updateMatrixWorld(true);
 
   const DENSITY_TARGET = 200;
-  const POINT_SIZE = 14;
+  const POINT_SIZE = 11;
 
   // BBox world du mesh
   const scanBboxWorld = new THREE.Box3().setFromObject(mesh);
@@ -869,48 +869,108 @@ function buildScanItem(mesh) {
   const NY = Math.max(2, Math.round(bSize.y / STEP));
   const NZ = Math.max(2, Math.round(bSize.z / STEP));
 
-  // Volume bâtiment
+  // ── Coque bâtiment — épouse la forme réelle du mesh (toit en pente, murs, emprise) ──
+  // Pour chaque colonne (x,z) un rayon vertical descendant donne la hauteur du toit.
+  // On construit une COQUE creuse : peau du toit (1 pt/colonne, suit les pentes) +
+  // murs (colonnes du périmètre remplies sur toute la hauteur). Pas d'intérieur plein
+  // → couvre toutes les faces sans former un bloc opaque dense sur les bâtiments hauts.
+  if (mesh.geometry && mesh.geometry.computeBoundsTree && !mesh.geometry.boundsTree) {
+    mesh.geometry.computeBoundsTree();
+  }
+  const _ray = new THREE.Raycaster();
+  const _down = new THREE.Vector3(0, -1, 0);
+  const _orig = new THREE.Vector3();
+  const _rayTop = bMax.y + bSize.y * 0.05; // départ légèrement au-dessus du toit
+  const volStart = positions.length;
+
+  // 1) Passe raycast : hauteur du toit par colonne (NaN si hors emprise)
+  const roofArr = new Float32Array((NX + 1) * (NZ + 1)).fill(NaN);
+  const colIdx = (ix, iz) => ix * (NZ + 1) + iz;
   for (let ix = 0; ix <= NX; ix++) {
-    for (let iy = 0; iy <= NY; iy++) {
-      for (let iz = 0; iz <= NZ; iz++) {
-        const jx = (Math.random() - 0.5) * STEP * 0.9;
-        const jy = (Math.random() - 0.5) * STEP * 0.9;
-        const jz = (Math.random() - 0.5) * STEP * 0.9;
-        const x = bMin.x + (ix / NX) * bSize.x + jx;
-        const y = bMin.y + (iy / NY) * bSize.y + jy;
-        const z = bMin.z + (iz / NZ) * bSize.z + jz;
-        positions.push(x, y, z);
-        normals.push(0, 1, 0);
-        randoms.push(Math.random());
+    for (let iz = 0; iz <= NZ; iz++) {
+      _orig.set(bMin.x + (ix / NX) * bSize.x, _rayTop, bMin.z + (iz / NZ) * bSize.z);
+      _ray.set(_orig, _down);
+      const hits = _ray.intersectObject(mesh, true);
+      if (hits.length) roofArr[colIdx(ix, iz)] = hits[0].point.y;
+    }
+  }
+  const pushPt = (x, y, z) => {
+    positions.push(x + (Math.random() - 0.5) * STEP * 0.9,
+                   y + (Math.random() - 0.5) * STEP * 0.9,
+                   z + (Math.random() - 0.5) * STEP * 0.9);
+    normals.push(0, 1, 0);
+    randoms.push(Math.random());
+  };
+
+  // La coque est légèrement décalée vers l'EXTÉRIEUR du mesh (toit relevé, murs
+  // poussés vers l'extérieur) pour rester visible par-dessus les faces opaques du
+  // bâtiment (depthTest activé) sans être masquée par elles.
+  const OUT = STEP * 1.3;          // décalage latéral des murs
+  const UP  = STEP * 0.6;          // relèvement de la peau du toit
+  const fcx = (bMin.x + bMax.x) / 2, fcz = (bMin.z + bMax.z) / 2;
+
+  // 2) Peau du toit + murs du périmètre
+  for (let ix = 0; ix <= NX; ix++) {
+    for (let iz = 0; iz <= NZ; iz++) {
+      const roofY = roofArr[colIdx(ix, iz)];
+      if (isNaN(roofY)) continue;                 // hors emprise
+      const cx = bMin.x + (ix / NX) * bSize.x;
+      const cz = bMin.z + (iz / NZ) * bSize.z;
+      pushPt(cx, roofY + UP, cz);                   // peau du toit (suit la pente, relevée)
+
+      // colonne du périmètre = bord de grille OU au moins un voisin hors emprise
+      const isPerim = ix === 0 || ix === NX || iz === 0 || iz === NZ ||
+        isNaN(roofArr[colIdx(ix - 1, iz)]) || isNaN(roofArr[colIdx(ix + 1, iz)]) ||
+        isNaN(roofArr[colIdx(ix, iz - 1)]) || isNaN(roofArr[colIdx(ix, iz + 1)]);
+      if (isPerim) {                                // mur : remplir du sol au toit, poussé dehors
+        let dx = cx - fcx, dz = cz - fcz;
+        const dl = Math.hypot(dx, dz) || 1; dx = dx / dl * OUT; dz = dz / dl * OUT;
+        for (let y = bMin.y; y < roofY - STEP * 0.5; y += STEP) pushPt(cx + dx, y, cz + dz);
       }
     }
   }
 
-  // Halo sol — couche élargie sous le bâtiment (onde qui "prend du terrain")
-  const haloDepth  = bSize.y * 0.10;
-  const haloSpread = 0.30;
-  const hxMin = bMin.x - bSize.x * haloSpread;
-  const hxMax = bMax.x + bSize.x * haloSpread;
-  const hzMin = bMin.z - bSize.z * haloSpread;
-  const hzMax = bMax.z + bSize.z * haloSpread;
+  // Fallback : si le raycast n'a quasi rien produit (mesh non fermé / inattendu),
+  // on revient à une coque basée sur la boîte (faces verticales + toit plat).
+  const volCount = (positions.length - volStart) / 3;
+  if (volCount < (NX + 1) * (NZ + 1) * 0.1) {
+    positions.length = volStart; normals.length = volStart; randoms.length = volStart / 3;
+    for (let ix = 0; ix <= NX; ix++) {
+      for (let iz = 0; iz <= NZ; iz++) {
+        const cx = bMin.x + (ix / NX) * bSize.x;
+        const cz = bMin.z + (iz / NZ) * bSize.z;
+        pushPt(cx, bMax.y, cz);                     // toit plat
+        if (ix === 0 || ix === NX || iz === 0 || iz === NZ)
+          for (let y = bMin.y; y < bMax.y - STEP * 0.5; y += STEP) pushPt(cx, y, cz);
+      }
+    }
+  }
+
+  // Halo sol — plan unique plat au niveau du sol (pas de couches verticales)
+  // scan1 et scan3 : zone au sol un peu plus large que scan2
+  const nameLower = (mesh.name || '').toLowerCase();
+  const haloSpread = (nameLower.startsWith('scan1') || nameLower.startsWith('scan3')) ? 0.50 : 0.42;
+  // marge UNIFORME : même distance au mesh sur les 4 côtés (indépendante de la forme du footprint)
+  const haloMargin = haloSpread * (bSize.x + bSize.z) / 2;
+  const hxMin = bMin.x - haloMargin;
+  const hxMax = bMax.x + haloMargin;
+  const hzMin = bMin.z - haloMargin;
+  const hzMax = bMax.z + haloMargin;
   const haloSizeX = hxMax - hxMin, haloSizeZ = hzMax - hzMin;
-  const STEP_H = STEP * 1.5;
+  const STEP_H = STEP * 0.72; // plan sol un peu plus dense → zone au sol plus visible
   const HNX = Math.max(2, Math.round(haloSizeX / STEP_H));
   const HNZ = Math.max(2, Math.round(haloSizeZ / STEP_H));
-  const HNY = Math.max(2, Math.round(haloDepth  / STEP_H));
   for (let ix = 0; ix <= HNX; ix++) {
-    for (let iy = 0; iy <= HNY; iy++) {
-      for (let iz = 0; iz <= HNZ; iz++) {
-        const jx = (Math.random() - 0.5) * STEP * 0.9;
-        const jy = (Math.random() - 0.5) * STEP * 0.9;
-        const jz = (Math.random() - 0.5) * STEP * 0.9;
-        const x  = hxMin + (ix / HNX) * haloSizeX + jx;
-        const y  = bMin.y - haloDepth + (iy / HNY) * haloDepth + jy;
-        const z  = hzMin + (iz / HNZ) * haloSizeZ + jz;
-        positions.push(x, y, z);
-        normals.push(0, 1, 0);
-        randoms.push(Math.random());
-      }
+    for (let iz = 0; iz <= HNZ; iz++) {
+      const jx = (Math.random() - 0.5) * STEP * 0.9;
+      const jz = (Math.random() - 0.5) * STEP * 0.9;
+      const x  = hxMin + (ix / HNX) * haloSizeX + jx;
+      const z  = hzMin + (iz / HNZ) * haloSizeZ + jz;
+      // exclure le halo sous l'emprise du bâtiment (évite la double densité à la base)
+      if (x >= bMin.x && x <= bMax.x && z >= bMin.z && z <= bMax.z) continue;
+      positions.push(x, bMin.y, z);
+      normals.push(0, 1, 0);
+      randoms.push(Math.random());
     }
   }
 
@@ -929,8 +989,7 @@ function buildScanItem(mesh) {
   const bMinL = new THREE.Vector3().copy(bMin); parallaxGroup2.worldToLocal(bMinL);
   const bMaxL = new THREE.Vector3().copy(bMax); parallaxGroup2.worldToLocal(bMaxL);
   scanBbox.expandByPoint(bMinL); scanBbox.expandByPoint(bMaxL);
-  const haloDepthL = Math.abs(bMaxL.y - bMinL.y) * 0.12;
-  scanBbox.min.y = Math.min(scanBbox.min.y, scanBbox.min.y - haloDepthL);
+  // halo plat : la bbox descend juste au niveau du sol du bâtiment, pas plus
   const scanCenter = scanBbox.getCenter(new THREE.Vector3());
 
   const scanGeom = new THREE.BufferGeometry();
@@ -985,7 +1044,6 @@ function buildScanItem(mesh) {
         float wSpeed = 1.2 + 0.8 * aRandom;           // 1.2–2.0 Hz par particule
         float w = uTime * wSpeed + aRandom * 6.28318;
         pFloat.x += 0.008 * sin(w);
-        pFloat.y += 0.008 * sin(w + 2.094);           // déphasé +2π/3
 
         // ── Onde sphérique depuis le centre de la face haute ──
         // Rayon 0 = un point au toit → s'étend vers les bords puis vers le bas
@@ -1076,9 +1134,6 @@ async function loadScene2() {
 
   // ── Détecter et construire tous les meshes scan1/2/3 ──
   parallaxGroup2.updateMatrixWorld(true);
-  const allNames2 = [];
-  mData2.scene.traverse(node => { if (node.name) allNames2.push(node.name); });
-  console.log('[scan2] mesh names in maisons2:', allNames2);
   const scanOrder = ['scan1', 'scan2', 'scan3'];
 
   // ── Calcul du STEP de référence sur le PLUS GRAND mesh scan ──
@@ -1095,9 +1150,8 @@ async function loadScene2() {
         }
       });
     });
-    const dtRef = 200;
+    const dtRef = 280; // densité de référence — un peu moins de particules sur les meshs
     scan2RefStep = refMaxSide > 0 ? refMaxSide / dtRef : null;
-    console.log('[scan2] refMaxSide:', refMaxSide, 'scan2RefStep:', scan2RefStep);
   }
 
   scanOrder.forEach(scanName => {
@@ -1110,7 +1164,6 @@ async function loadScene2() {
       found.updateMatrixWorld(true);
       const item = buildScanItem(found);
       scanItems2.push(item);
-      console.log('[scan2] built item:', item.name);
     }
   });
   if (!scanItems2.length) console.warn('[scan2] no scan meshes found');
@@ -1432,7 +1485,22 @@ function drawAnnotations(time) {
       annotCtx.globalAlpha = pt.alpha * textFade;
       annotCtx.textAlign = s === 1 ? 'left' : 'right';
       annotCtx.textBaseline = 'middle';
-      annotCtx.fillText(label, x + (tickLen + 4) * s, lineTop);
+
+      const textX = x + (tickLen + 4) * s;
+      const tw    = annotCtx.measureText(label).width;
+      const padX = 5, padY = 3, br = 3;
+      const bgX   = s === 1 ? textX - padX : textX - tw - padX;
+      const bgY   = lineTop - (fontSize / 2) - padY;
+
+      // Fond blanc arrondi
+      annotCtx.fillStyle = 'white';
+      annotCtx.beginPath();
+      annotCtx.roundRect(bgX, bgY, tw + padX * 2, fontSize + padY * 2, br);
+      annotCtx.fill();
+
+      // Texte par-dessus
+      annotCtx.fillStyle = color;
+      annotCtx.fillText(label, textX, lineTop);
     }
   });
 
