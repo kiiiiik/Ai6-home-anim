@@ -560,15 +560,22 @@ function updateScrollAndTransition() {
         scanAnimStartMs2 = performance.now();
         etiq2LocalPositions = [scanItems2[activeScanIdx2].etiqLocalPos];
       }
-    } else {
-      scanAnimStartMs2  = null;
-      activeScanIdx2    = null;
-      etiq2AnimStartMs  = null;
-      etiq2BarData      = null;
-      scan2Order        = null;
-      scan2OrderIdx     = 0;
-      scanItems2.forEach(item => { item.uniforms.uRadius.value = 0; });
     }
+    // Pas de reset immédiat au retour vers la scène 1 : on laisse l'animation
+    // (particules + étiquette) continuer et s'estomper avec le fondu du canvas
+    // (cf. bloc ci-dessous), au lieu de la couper net à mi-fondu.
+  }
+
+  // Nettoyage différé : uniquement une fois la scène 2 totalement invisible,
+  // pour éviter toute coupure brutale pendant le fondu.
+  if (!scene2Active && scene2FadeIn <= 0.01 && scanAnimStartMs2 !== null) {
+    scanAnimStartMs2  = null;
+    activeScanIdx2    = null;
+    etiq2AnimStartMs  = null;
+    etiq2BarData      = null;
+    scan2Order        = null;
+    scan2OrderIdx     = 0;
+    scanItems2.forEach(item => { item.uniforms.uRadius.value = 0; });
   }
 
 }
